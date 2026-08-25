@@ -235,7 +235,7 @@ state externalised to Redis first.
 | [`alora-auth-db/Migrations/README.md`](alora-auth-db/Migrations/README.md) | When a change needs a migration, and when it does not |
 | [`alora-auth-api/ARCHITECTURE.md`](alora-auth-api/ARCHITECTURE.md) | Layering, request lifecycle, threat model → controls |
 | [`alora-auth-api/JUSTIFICATION.md`](alora-auth-api/JUSTIFICATION.md) | Construct-level audit: why each piece exists, what breaks without it |
-| [`MIGRATION_SPEC.md`](MIGRATION_SPEC.md) | The behavioural contract, including exact security invariants |
+| [`SPEC.md`](SPEC.md) | The behavioural contract: endpoint inventory, security invariants, decision record |
 
 ---
 
@@ -259,9 +259,11 @@ Compare against `'IdpProvider'`, not the lower-cased form.
 **`/auth/authorize` returns `Invalid request` and the code challenge looks right.**
 Check its length — it must be exactly 43 characters. On Git Bash, `openssl
 base64` ends its output with CRLF, and a `tr -d '=
-'` that omits `` leaves the
+'` that omits `
+` leaves the
 carriage return in your JSON. The server reports an invalid character in a string
-literal, which does not obviously point at the challenge. Strip `` too, as the
+literal, which does not obviously point at the challenge. Strip `
+` too, as the
 snippet above does.
 
 **API exits at startup with a config error.**

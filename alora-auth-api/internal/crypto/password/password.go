@@ -19,7 +19,7 @@ const MaxPasswordLength = 512
 // ErrPasswordTooLong is returned by Hash for over-length input.
 var ErrPasswordTooLong = errors.New("password: too long")
 
-// argon2id parameters — MUST match MIGRATION_SPEC §2 byte-for-byte.
+// argon2id parameters — MUST match SPEC §2 byte-for-byte.
 var params = &argon2id.Params{
 	Memory:      19456, // KiB (~19 MiB)
 	Iterations:  2,

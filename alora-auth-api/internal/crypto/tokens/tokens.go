@@ -1,5 +1,5 @@
 // Package tokens generates opaque high-entropy tokens and their at-rest hashes.
-// Encoding is deliberate and must not be conflated (MIGRATION_SPEC global-risk #2):
+// Encoding is deliberate and must not be conflated (SPEC §8 global-risk #2):
 //   - refresh + invite tokens: hex   (matches the Node implementation)
 //   - auth codes / reset tokens / OAuth state+nonce: base64url (unpadded)
 //   - at-rest: sha256 → LOWERCASE hex of the raw token STRING's UTF-8 bytes

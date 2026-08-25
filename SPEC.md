@@ -1,19 +1,38 @@
-# Alora Auth — Go (Gin + pgx/v5 + sqlc) Migration Spec
+# Alora Auth — Behavioural Specification
 
-> Source of truth for the Fastify → Go rewrite. Produced 2026-06-16 by deep-reading the live
-> `alora-auth-api` (43 source files + 14 tests) and `alora-auth-db` (Prisma schema + raw SQL).
-> **Stale design notes are overruled by code/tests.** The Fastify `node:test` suite in
-> `alora-auth-api/src/__tests__` is the **parity oracle** — every status code, JSON shape, cookie
-> flag, crypto param, and error string below is a hard requirement.
+> What this system must do, stated precisely enough to verify. Every status code,
+> JSON shape, cookie flag, crypto parameter and error string below is a hard
+> requirement, not a description of the current implementation — if the code and
+> this document disagree, one of them is a bug, and which one is a decision
+> someone has to make deliberately.
+>
+> Companion documents: [`alora-auth-api/ARCHITECTURE.md`](alora-auth-api/ARCHITECTURE.md)
+> covers layering and the threat model; this covers behaviour. Section numbers are
+> stable — source comments cite `SPEC §2` and `SPEC §8` directly, so sections are
+> rewritten in place rather than renumbered.
+>
+> Originally written 2026-06-16 to drive the Fastify → Go rewrite, by deep-reading
+> the running Node service and treating its test suite as the parity oracle. The
+> rewrite is finished; what remains here is the contract it was held to.
 
 ---
 
-## 0. Key corrections vs the old design notes
-- **15 DB models, not 9** (+`authorization_codes`, +4 RBAC tables, +`password_reset_tokens`).
+## 0. Things that surprise people
+
+Read this section before concluding something is broken.
+
+- **16 tables**, including `tbl_schema_migrations`. Early design notes said 9; they
+  omitted `authorization_codes`, the four RBAC tables and `password_reset_tokens`.
 - **There is no `POST /auth/login`.** Password login is the **OAuth2 authorization-code + PKCE (S256)** flow: `POST /auth/authorize` → `POST /auth/token`.
 - **No CSRF plugin / dependency exists.** Defense is structural (SameSite=Lax refresh cookie + Bearer on `/admin/*`).
 - **No `__Host-` cookie prefix.** Cookies use an explicit `Domain` attribute for `*.alora.io` SSO.
-- **Email delivery is built** (`lib/mailer.js` + nodemailer).
+- **Email delivery is built in**, and is a no-op when SMTP is unconfigured: the
+  invite/reset URL comes back in the API response instead, so development works
+  without a mail server.
+- **`/` is an authorization endpoint, not a login page.** Opening it without PKCE
+  parameters correctly shows "Missing required parameters".
+- **There is no signup endpoint.** The first tenant and administrator are created
+  out of band by `cmd/bootstrap`.
 
 ---
 
@@ -111,58 +130,48 @@ Runs in a pgx tx with `SELECT ... WHERE refresh_token_hash=$1 FOR UPDATE` (**no 
 
 ---
 
-## 4. Proposed Go package layout (package-by-feature)
-```
-alora-auth-api/
-├── cmd/api/main.go                  # load config, jwt.init() once, pool, start jobs after listen, signal shutdown
-├── internal/
-│   ├── config/config.go             # env load + fail-fast validate, prod placeholder/length guards, \n→newline PEM
-│   ├── platform/
-│   │   ├── database/{db.go, sqlc/}  # pgxpool + Ping/Close + enum-array codec; GENERATED sqlc (one shared pkg)
-│   │   ├── logger/logger.go         # slog, redaction hook, pretty(dev)/json(prod)
-│   │   ├── httpx/{errors,requestid,headers,cors,ratelimit,bodylimit,cookies}.go
-│   │   ├── jobs/{expire_sessions,expire_invitations}.go
-│   │   └── audit/audit.go           # fire-and-forget LogAudit(context.Background(), ...) goroutine+recover
-│   ├── crypto/
-│   │   ├── tokens/tokens.go         # GenerateRefreshToken(hex), GenerateOpaque(base64url), HashToken(sha256 hex)
-│   │   ├── password/password.go     # argon2id PHC encode/decode, DUMMY_HASH, 512 UTF-16 guard
-│   │   ├── jwtkeys/{keys,sign,verify,jwks}.go  # kid-keyed RS256, required claims, 5s skew
-│   │   └── pkce/pkce.go             # S256 verify (sha256→base64url→ConstantTimeCompare)
-│   ├── middleware/{authenticate,fresh,admin,feature,tenant}.go  # + ADMIN_FEATURES 12-key registry
-│   ├── auth/{service,repo}.go       # token-minting: buildTokenPayload, refreshAccessToken
-│   ├── oauth/{handler,service,google,state,dto}.go  # THE login path
-│   ├── session/{handler,service,repo,cookies,dto}.go  # rotateSession TX
-│   ├── invitation/{handler,service,repo,dto}.go
-│   ├── reset/{handler,service,repo,dto}.go
-│   ├── mailer/mailer.go             # lazy SMTP singleton, Noop when MAIL_HOST empty
-│   ├── admin/{users,groups,permissions,sessions,products,client,me, service,repo,dto}.go
-│   └── health/handler.go
-├── db/
-│   ├── migrations/{0001_enums_tables, 0002_extras_initial, 0003_extras_rbac, 0004_procs_udf}.sql
-│   └── queries/{products,clients,users,sessions,oauth,invitations,rbac,passwordreset,audit,procs}.sql
-└── sqlc.yaml                        # postgresql; uuid→google/uuid.UUID, jsonb→json.RawMessage; one shared db pkg
-```
+## 4. Package layout
+
+The authoritative tree is in
+[`alora-auth-api/ARCHITECTURE.md`](alora-auth-api/ARCHITECTURE.md). It is not
+duplicated here: the copy that used to live in this section drifted out of date
+and had to be deleted, which is what a second copy of a directory listing always
+does eventually.
+
+Package-by-feature, not by layer. The rules that constrain it:
+
 Repos wrap `*Queries` + `*pgxpool.Pool` for `WithTx(tx)`. DTOs (binding tags) and response structs live in each feature's `dto.go` and are **NEVER** the sqlc row structs. Prisma `Int`→`int32`; `DateTime?`→`pgtype.Timestamptz`/`*time.Time` in DTOs; enums→sqlc string constants validated in service.
 
 ---
 
-## 5. Build order (dependency-first)
-1. `db/migrations` 0001–0004 (enums, 15 tables, extras: composite FKs + partial indexes + DROP legacy idx, then 3 procs + 1 UDF).
-2. `sqlc.yaml` + `db/queries/*.sql` → generate shared db package (incl. raw/locking queries + proc/udf wrappers).
-3. `internal/config` (env + fail-fast, PEM normalize).
-4. `internal/platform/database` (pgxpool + Ping/Close + enum-array codec).
-5. `internal/platform/logger` (redaction hook).
-6. `internal/crypto/tokens` + `crypto/pkce` (pure).
-7. `internal/crypto/password` (argon2id PHC, DUMMY_HASH, 512 guard).
-8. `internal/crypto/jwtkeys` (kid-keyed RS256 sign/verify/JWKS; init once).
-9. `internal/platform/httpx` (errors, requestid, headers, cors, ratelimit, bodylimit, cookies) + `audit` + `mailer`.
-10. `internal/middleware` (authenticate → fresh → admin → feature(key) → tenant; ADMIN_FEATURES 12-key registry).
-11. `internal/auth` (token-minting service shared by oauth+session).
-12. `internal/session` (rotateSession TX, cookies, /auth/refresh /auth/logout /auth/session).
-13. `internal/oauth` (/auth/authorize, /auth/token, /auth/google[/callback], state store). **THE login path.**
-14. `internal/invitation` + `internal/reset`.
-15. `internal/admin` (users, groups, permissions, sessions, products, client, me).
-16. `internal/health` + `cmd/api/main.go` wiring; then port the test oracle as httptest integration tests.
+## 5. Dependency order
+
+Not a checklist any more — the build is done — but the order still holds, and it
+is the order to construct things in when adding a feature or standing the system
+up from nothing. Each layer may only depend on those above it.
+
+1. **Database objects** — enums, tables, views, then functions and procedures.
+   `alora-auth-db/build.sql` applies them in that order; versioned migrations run
+   after, never before, because a migration may reference a table the build
+   creates.
+2. **Generated bindings** — `sqlc generate` reads the database repository, so the
+   schema must exist as files before the Go code that binds to it does.
+3. **Configuration** — loaded and validated before anything that consumes it,
+   which is why a bad value is a startup failure rather than a runtime one.
+4. **Platform** — database pool, logger.
+5. **Crypto** — tokens, PKCE, password, JWT keys. All pure; none may import a
+   feature package.
+6. **HTTP plumbing** — errors, request id, security headers, CORS, rate limit,
+   body limit, cookies; then audit and mailer.
+7. **Middleware** — authenticate → freshness → admin → feature → tenant.
+8. **Features** — auth (token minting, shared), then session, oauth, invitation,
+   reset, admin, health.
+9. **Wiring** — `cmd/api/main.go`, and the integration tests that exercise the
+   real router against a real database.
+
+The one rule that matters: nothing in `internal/crypto` or `internal/platform`
+may import a feature package. When that inverts, the layering is gone and the
+next person cannot reason about what a change touches.
 
 ---
 
@@ -178,7 +187,11 @@ Repos wrap `*Queries` + `*pgxpool.Pool` for `WithTx(tx)`. DTOs (binding tags) an
 
 ---
 
-## 7. Resolved decisions (open questions → calls)
+## 7. Decision record
+
+Cited as `SPEC §7` from `ARCHITECTURE.md`. Kept as written when each call was
+made — a decision record is worth less once it is edited to look prescient.
+
 | # | Question | DECISION |
 |---|---|---|
 | D1 | REUSE_DETECTED nuke rolled back by JS `$transaction` throw (latent bug) | **COMMIT the family-nuke before returning 401.** Required by parity tests; fixes the latent bug. |
@@ -196,7 +209,13 @@ Repos wrap `*Queries` + `*pgxpool.Pool` for `WithTx(tx)`. DTOs (binding tags) an
 
 ---
 
-## 8. Global JS→Go landmines (apply project-wide)
+## 8. Project-wide invariants
+
+Numbered and cited from source comments (`SPEC §8`, "global-risk #N"), so the
+numbering is fixed. Each one was a real way to get this wrong — several were
+found the hard way during the rewrite, where a JavaScript idiom translated into
+Go that compiled, ran, and was subtly incorrect.
+
 1. **JWT alg-confusion** — pin RS256 allowlist + resolve by kid; reject missing/unknown kid.
 2. **base64url vs base64** — codes/reset/state/PKCE use `base64.RawURLEncoding` (unpadded). **Refresh tokens are HEX, not base64url.**
 3. **SHA-256 at-rest** — lowercase hex, hash the UTF-8 bytes of the raw token *string*.

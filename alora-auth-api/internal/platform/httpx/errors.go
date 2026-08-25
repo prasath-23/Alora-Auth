@@ -107,7 +107,7 @@ func resolve(err error) (int, string) {
 // It runs LAST in the chain (registered early, executes on the way out) so it can
 // observe errors from every downstream handler.
 //
-// Envelope rules (MIGRATION_SPEC §2):
+// Envelope rules (SPEC §2):
 //   - >=500 → {"error":"Internal Server Error","reqId":...} — cause never leaked
 //   - 4xx   → {"error":<safe label>,"reqId":...}
 //   - 404 route-miss → {"error":"Not Found"} with NO reqId (see NotFound)

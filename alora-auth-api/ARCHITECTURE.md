@@ -1,7 +1,7 @@
 # Alora Auth (Go) — Architecture
 
 Production architecture for the **alora-auth** Identity Provider, rewritten from Node/Fastify to
-Go/Gin. This document is the architectural contract; **`../MIGRATION_SPEC.md`** holds the exhaustive,
+Go/Gin. This document is the architectural contract; **`../SPEC.md`** holds the exhaustive,
 byte-level behavioral + security invariants and the endpoint inventory. Where this doc summarizes,
 the spec governs.
 
@@ -115,7 +115,7 @@ request-id (uuid)
 ## 4. Security architecture
 
 > The user requirement is *zero known vulnerabilities*. Every control below maps to an explicit
-> invariant in `MIGRATION_SPEC.md §2` and a threat in §15 of this doc.
+> invariant in `SPEC.md §2` and a threat in §15 of this doc.
 
 ### Authentication (JWT)
 - **RS256 only.** The verifier pins an algorithm allowlist and resolves the key by `kid`. Tokens
@@ -271,7 +271,7 @@ on a different pod than `/auth/google`). This is flagged, not yet built.
 
 ## 10. Decisions
 
-Canonical decisions **D1–D12** are recorded in `MIGRATION_SPEC.md §7`. Additional:
+Canonical decisions **D1–D12** are recorded in `SPEC.md §7`. Additional:
 
 - **D13 — `timestamptz` over `timestamp(3)`.** All timestamp columns use `timestamptz` to eliminate
   the UTC/expiry ambiguity of the original `timestamp without time zone` schema.

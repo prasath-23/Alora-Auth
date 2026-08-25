@@ -686,7 +686,7 @@
 | `RATE_LIMIT_GLOBAL_MAX=100` | 42-43 | Node parity; strict parsing | Couples to TRUSTED_PROXIES — unset proxies makes this a self-DoS | Code default |
 | `RATE_LIMIT_AUTHORIZE_IP/EMAIL 10/5` | 44-45 | Byte-parity; email-keyed bucket survives IP rotation | Only 3 of ~8 route limits are env-exposed | Code defaults |
 
-### 2.27 `ARCHITECTURE.md` + `../MIGRATION_SPEC.md`
+### 2.27 `ARCHITECTURE.md` + `../SPEC.md`
 
 | Construct | Line | Why | Optimization | If absent |
 |---|---|---|---|---|
@@ -795,7 +795,7 @@
 | 9 | Make `DeleteGroupFeatures` and `CreateGroupFeatures` self-scoping (`USING/SELECT … tbl_groups WHERE g.client_id=$2`) — today the tenant guard is a comment. | critical | `db/queries/rbac.sql:118-129` |
 | 10 | Split `Init` into `Init` (sets active signer) and `RegisterVerifyKey` — registering an old kid currently makes it the **active signer**, inverting rotation. | critical | `jwtkeys.go:50` |
 | 11 | Make the PKCE test a real conformance test (hardcode the RFC 7636 Appendix-B challenge, drop the crypto imports) — an encoder change that breaks 100% of logins keeps the suite green. | critical | `pkce_test.go:11-13` |
-| 12 | Correct SPEC §2 L97: the audit FK is `NO ACTION … DEFERRABLE`, not `SET NULL` (impossible with `client_id NOT NULL`); and it is **7** composite FKs, not 4. | critical | `MIGRATION_SPEC.md:96-97` |
+| 12 | Correct SPEC §2 L97: the audit FK is `NO ACTION … DEFERRABLE`, not `SET NULL` (impossible with `client_id NOT NULL`); and it is **7** composite FKs, not 4. | critical | `SPEC.md:96-97` |
 
 ### P1 — Security hardening with a concrete exploit path
 
@@ -869,7 +869,7 @@
 | 73 | Delete the confirmed dead constructs (see §4 dead-weight list): `emit_interface`, `emit_exact_table_names`, `*.dll`, `Config.Env`, `session_uuid` + its index, 4 redundant/unusable indexes, `CheckProductPermissionExists`, `GetProductById`, `ListActiveProducts`, `GetPendingInviteMinimal`, `ClaimInviteRegistration`, `jwt.WithValidate(true)`, the dead `Issuer()==""` clause, `NULLS LAST` ×4. | low | multiple |
 | 74 | Make the config test fixture hermetic and close the named coverage gaps (GOOGLE_CLIENT_SECRET arm, 31/32 boundary, JWT_PUBLIC_KEY normalization, `splitNonEmpty`, mis-cased NODE_ENV). | high | `config_test.go` |
 | 75 | Add the crypto tests that would catch silent criticals: two generated tokens must differ; base64url length assertion; salt=16B/key=32B and no `=` padding; the three panicking hash shapes; HS256-with-public-key; JWKS must contain no `d`/`p`/`q`. | high | `tokens_test.go`, `password_test.go`, `jwtkeys_test.go` |
-| 76 | Delete SPEC §4's stale layout tree and the dead "DROP legacy tbl_users_client_id_email_key" instruction; enumerate SPEC §6's "see workflow output" queries; fix the `§15` reference, the ARCH CORS sentence, the audit-context contradiction, the 14→16 suite count and the 43→48 source count. | medium | `ARCHITECTURE.md`, `MIGRATION_SPEC.md` |
+| 76 | Delete SPEC §4's stale layout tree and the dead "DROP legacy tbl_users_client_id_email_key" instruction; enumerate SPEC §6's "see workflow output" queries; fix the `§15` reference, the ARCH CORS sentence, the audit-context contradiction, the 14→16 suite count and the 43→48 source count. | medium | `ARCHITECTURE.md`, `SPEC.md` |
 | 77 | Add implementation-status markers to ARCH §2 and SPEC §5/§7 — 12 of 22 named packages are empty while the prose is present-indicative. | high | docs |
 | 78 | Resolve the `expires_in` triple source: derive from `cfg.JWT.AccessTTL` or assert `== 900*time.Second` at boot. | medium | `config.go:117,162` |
 
@@ -912,5 +912,5 @@
 
 ### 4.4 Confirmed dead weight (consolidated, verified)
 
-`sqlc.yaml:11` `emit_interface` (42 KB unused querier.go) · `sqlc.yaml:13` `emit_exact_table_names` (restates the default) · `.gitignore:5` `*.dll` (no cgo) · `config.go:19` `Config.Env` (write-only) · `sessions.sql:33-35` `FindActiveSuccessorById` (byte-identical duplicate) · `0001_schema.sql:71,218` `session_uuid` + its unique index (write-only, indexed on both hot write paths) · `0001_schema.sql:232,233,237,239` four redundant/unusable indexes · `0001_schema.sql:14` `CREATE EXTENSION pgcrypto` · `0001_schema.sql:31` `require_mfa` · `entitlements.sql:89-96` `CheckProductPermissionExists` · `products.sql:21-24,37-41` `GetProductById`, `ListActiveProducts` · `invitations.sql:146-155` `GetPendingInviteMinimal` · `invitations.sql:100-111` `ClaimInviteRegistration` · `jwtkeys.go:158` `jwt.WithValidate(true)` · `jwtkeys.go:169` `tok.Issuer()==""` clause · `NULLS LAST` ×4 (`users.sql:105`, `invitations.sql:143`) · `tokens.go:19-21` and `password.go:73-75` dead `rand.Read` error branches · `tokens_test.go:28-30` and `pkce_test.go:24-29` vacuous assertions · `oauth.sql:98-101` `CleanupExpiredAuthCodes` (no caller, unbatched) · `password.go:90` `Warm()` (zero call sites) · `MIGRATION_SPEC.md:114-145` stale layout tree · `MIGRATION_SPEC.md:98` dead DROP-index instruction · `ON UPDATE CASCADE` ×26.
+`sqlc.yaml:11` `emit_interface` (42 KB unused querier.go) · `sqlc.yaml:13` `emit_exact_table_names` (restates the default) · `.gitignore:5` `*.dll` (no cgo) · `config.go:19` `Config.Env` (write-only) · `sessions.sql:33-35` `FindActiveSuccessorById` (byte-identical duplicate) · `0001_schema.sql:71,218` `session_uuid` + its unique index (write-only, indexed on both hot write paths) · `0001_schema.sql:232,233,237,239` four redundant/unusable indexes · `0001_schema.sql:14` `CREATE EXTENSION pgcrypto` · `0001_schema.sql:31` `require_mfa` · `entitlements.sql:89-96` `CheckProductPermissionExists` · `products.sql:21-24,37-41` `GetProductById`, `ListActiveProducts` · `invitations.sql:146-155` `GetPendingInviteMinimal` · `invitations.sql:100-111` `ClaimInviteRegistration` · `jwtkeys.go:158` `jwt.WithValidate(true)` · `jwtkeys.go:169` `tok.Issuer()==""` clause · `NULLS LAST` ×4 (`users.sql:105`, `invitations.sql:143`) · `tokens.go:19-21` and `password.go:73-75` dead `rand.Read` error branches · `tokens_test.go:28-30` and `pkce_test.go:24-29` vacuous assertions · `oauth.sql:98-101` `CleanupExpiredAuthCodes` (no caller, unbatched) · `password.go:90` `Warm()` (zero call sites) · `ON UPDATE CASCADE` ×26.
 
