@@ -23,7 +23,7 @@ that binds to it are one logical change.
 | Go 1.26+ | the API | `go version` |
 | Node 20+ | the UI | `node --version` |
 | Docker | a local PostgreSQL | `docker info` |
-| PostgreSQL 16 | production; local dev can use Docker instead | `psql --version` |
+| `psql` (PostgreSQL 16 client) | applying to a real database. Not needed for `./migrate.sh --docker`, which uses the throwaway container's own client | `psql --version` |
 | [sqlc](https://sqlc.dev) | only if you change the database | `sqlc version` |
 
 On Windows, run the shell scripts from **Git Bash**.
@@ -41,11 +41,13 @@ cd alora-auth-db
 ./migrate.sh --docker          # throwaway PostgreSQL on :55532, fully built
 ```
 
-That verifies the whole build. For a database you want to keep:
+That verifies the whole build, then throws the container away. For a database
+you want to keep — this one needs `psql` on PATH:
 
 ```bash
 export DATABASE_URL="postgres://postgres:secret@localhost:5432/alora"
-./migrate.sh
+./migrate.sh              # apply
+./migrate.sh --status     # report what is pending, change nothing
 ```
 
 ### 2. API
@@ -119,6 +121,25 @@ http://127.0.0.1:5173/?product_id=<uuid>
 Then exchange the returned `?code=` at `POST /auth/token` with the original
 verifier. `alora-auth-ui/e2e/auth.spec.js` does exactly this and is the clearest
 working example.
+
+To drive it from a shell — this is the whole flow, and it is the exact sequence
+used to verify these instructions:
+
+```bash
+PRODUCT=<product uuid from bootstrap>
+VERIFIER=$(openssl rand -hex 32)
+CHALLENGE=$(printf "%s" "$VERIFIER" | openssl dgst -sha256 -binary             | openssl base64 | tr '+/' '-_' | tr -d '=
+')
+
+CODE=$(curl -s -X POST http://127.0.0.1:3001/auth/authorize   -H 'Content-Type: application/json'   -d "{\"email\":\"admin@acme.com\",\"password\":\"…\",
+       \"product_id\":\"$PRODUCT\",\"redirect_url\":\"http://127.0.0.1:5173\",
+       \"code_challenge\":\"$CHALLENGE\",\"code_challenge_method\":\"S256\"}"   | grep -oE '"code":"[^"]+' | cut -d'"' -f4)
+
+curl -s -X POST http://127.0.0.1:3001/auth/token   -H 'Content-Type: application/json'   -d "{\"code\":\"$CODE\",\"code_verifier\":\"$VERIFIER\",
+       \"redirect_url\":\"http://127.0.0.1:5173\"}"
+```
+
+The code is single-use: exchanging it twice fails, by design.
 
 ---
 
@@ -234,6 +255,14 @@ native binaries need. Scope it to `docker` only; the scripts here do.
 **`type "idpprovider" does not exist`**
 The enum types are created quoted, so `pg_type.typname` keeps its mixed case.
 Compare against `'IdpProvider'`, not the lower-cased form.
+
+**`/auth/authorize` returns `Invalid request` and the code challenge looks right.**
+Check its length — it must be exactly 43 characters. On Git Bash, `openssl
+base64` ends its output with CRLF, and a `tr -d '=
+'` that omits `` leaves the
+carriage return in your JSON. The server reports an invalid character in a string
+literal, which does not obviously point at the challenge. Strip `` too, as the
+snippet above does.
 
 **API exits at startup with a config error.**
 That is the intended behaviour. Required variables are listed in

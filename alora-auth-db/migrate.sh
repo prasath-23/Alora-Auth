@@ -61,7 +61,19 @@ elif [ -n "$CONTAINER" ]; then
   MSYS_NO_PATHCONV=1 docker cp . "$CONTAINER:/db" >/dev/null
   psql_run() { MSYS_NO_PATHCONV=1 docker exec -w /db "$CONTAINER" psql -U postgres -d alora -v ON_ERROR_STOP=1 "$@"; }
 else
-  echo "error: psql not found and no container available." >&2
+  # Reached only for a real target with no local client. The container fallback
+  # above needs a container this script started, and a client container cannot
+  # be pointed at an arbitrary host database reliably across platforms -- the
+  # loopback in the URL would resolve to the container itself.
+  cat >&2 <<'MSG'
+error: psql is required to apply to this database, and was not found on PATH.
+
+  * to verify the build with no local PostgreSQL:  ./migrate.sh --docker
+  * to apply to a real database:                   install the PostgreSQL client
+      Windows   winget install PostgreSQL.PostgreSQL.16
+      macOS     brew install libpq
+      Debian    apt-get install postgresql-client
+MSG
   exit 2
 fi
 
