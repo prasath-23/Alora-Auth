@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // setValidEnv sets every required variable to a valid dummy so Load succeeds;
 // individual tests then override one to exercise a failure path. t.Setenv
@@ -129,5 +132,50 @@ func TestLoadRejectsOutOfRangeNumerics(t *testing.T) {
 		if _, err := Load(); err == nil {
 			t.Errorf("expected error for %s=%s", k, v)
 		}
+	}
+}
+
+// Pool sizing is validated at startup rather than trusted, because every one of
+// these mistakes produces a service that starts cleanly and then fails under
+// load, when the cause is furthest from the symptom.
+func TestPoolSizingIsValidated(t *testing.T) {
+	cases := []struct {
+		name, max, min string
+		wantErr        string
+	}{
+		{"min above max", "5", "9", "exceeds"},
+		{"zero max cannot serve a request", "0", "0", "between"},
+		{"max beyond any sane server", "5000", "1", "between"},
+		{"non-numeric", "ten", "1", "integer"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setValidEnv(t)
+			t.Setenv("DB_MAX_CONNS", tc.max)
+			t.Setenv("DB_MIN_CONNS", tc.min)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("accepted DB_MAX_CONNS=%q DB_MIN_CONNS=%q; a pool that cannot "+
+					"serve traffic must not reach production", tc.max, tc.min)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error %q does not mention %q, so it will not tell an operator what to change",
+					err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestPoolSizingDefaults(t *testing.T) {
+	setValidEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	// Explicit values, not pgx's CPU-derived default: the number of cores the API
+	// happens to run on says nothing about what the database can serve.
+	if cfg.DBMaxConns != 10 || cfg.DBMinConns != 2 {
+		t.Fatalf("defaults are max=%d min=%d, want max=10 min=2", cfg.DBMaxConns, cfg.DBMinConns)
 	}
 }

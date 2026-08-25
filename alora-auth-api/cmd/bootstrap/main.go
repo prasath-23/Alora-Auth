@@ -83,7 +83,9 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	pool, err := database.New(ctx, cfg.DatabaseURL)
+	// One connection: this runs once, by hand, and has no reason to occupy a
+	// production-sized slice of the database's connection budget.
+	pool, err := database.New(ctx, cfg.DatabaseURL, database.Options{MaxConns: 1, MinConns: 1})
 	if err != nil {
 		return err
 	}

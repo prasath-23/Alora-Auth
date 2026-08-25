@@ -22,6 +22,17 @@ type Config struct {
 	DatabaseURL string
 	FrontendURL string
 
+	// Connection-pool size. Explicit because pgx otherwise derives MaxConns from
+	// the number of CPUs on the machine running the API, which is unrelated to
+	// what the database can serve: scaling out to more or larger replicas then
+	// silently multiplies connections until Postgres starts refusing them, and
+	// the first symptom is a login outage.
+	//
+	// These supersede any pool_* parameters in DATABASE_URL, so there is exactly
+	// one place to look.
+	DBMaxConns int
+	DBMinConns int
+
 	// TrustedProxies is the explicit allowlist of proxy CIDRs/IPs Gin may trust
 	// for X-Forwarded-* (Decision D8). Empty = trust none (never trust-all).
 	TrustedProxies []string
@@ -158,12 +169,32 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// Pool sizing. Bounded rather than free-form: 0 connections cannot serve a
+	// request, and a four-figure pool exhausts a default Postgres (max_connections
+	// 100) from a single replica.
+	dbMaxConns, err := intEnv("DB_MAX_CONNS", 10, 1, 500)
+	if err != nil {
+		return nil, err
+	}
+	dbMinConns, err := intEnv("DB_MIN_CONNS", 2, 0, 500)
+	if err != nil {
+		return nil, err
+	}
+	// Warm connections are not free here: every new connection runs AfterConnect,
+	// which round-trips to register the enum types. A minimum above the maximum
+	// is a typo, and pgx would accept it and behave unpredictably.
+	if dbMinConns > dbMaxConns {
+		return nil, fmt.Errorf("config: DB_MIN_CONNS (%d) exceeds DB_MAX_CONNS (%d)", dbMinConns, dbMaxConns)
+	}
+
 	return &Config{
 		Port:           port,
 		Host:           getenv("HOST", "127.0.0.1"),
 		Env:            env,
 		IsProd:         isProd,
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
+		DBMaxConns:     dbMaxConns,
+		DBMinConns:     dbMinConns,
 		FrontendURL:    getenv("FRONTEND_URL", "http://localhost:5173"),
 		TrustedProxies: splitNonEmpty(os.Getenv("TRUSTED_PROXIES")),
 		JWT: JWTConfig{

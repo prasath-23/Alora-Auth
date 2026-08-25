@@ -68,7 +68,7 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	if err := jwtkeys.Init(cfg.JWT.PrivateKeyPEM, cfg.JWT.PublicKeyPEM, cfg.JWT.KeyID, cfg.JWT.Issuer); err != nil {
 		t.Fatalf("jwtkeys: %v", err)
 	}
-	pool, err := database.New(context.Background(), cfg.DatabaseURL)
+	pool, err := database.New(context.Background(), cfg.DatabaseURL, database.Options{})
 	if err != nil {
 		t.Fatalf("database: %v", err)
 	}

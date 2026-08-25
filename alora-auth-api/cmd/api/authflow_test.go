@@ -71,7 +71,7 @@ func newFlowFixture(t *testing.T) *fixture {
 		t.Fatalf("jwtkeys: %v", err)
 	}
 	ctx := context.Background()
-	pool, err := database.New(ctx, cfg.DatabaseURL)
+	pool, err := database.New(ctx, cfg.DatabaseURL, database.Options{})
 	if err != nil {
 		t.Fatalf("database: %v", err)
 	}

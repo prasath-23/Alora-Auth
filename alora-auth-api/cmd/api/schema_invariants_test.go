@@ -19,7 +19,7 @@ func schemaPool(t *testing.T) *pgxpool.Pool {
 	if dsn == "" {
 		t.Skip("ALORA_TEST_DB not set; skipping schema invariant tests")
 	}
-	pool, err := database.New(context.Background(), dsn)
+	pool, err := database.New(context.Background(), dsn, database.Options{})
 	if err != nil {
 		t.Fatalf("database: %v", err)
 	}
