@@ -69,36 +69,71 @@ GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA public TO alora_app;
 -- The exceptions below are then carved out.
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO alora_app;
 
--- ── Write access ────────────────────────────────────────────────────────────
--- Listed explicitly rather than granted wholesale, so a table added later has no
--- write access until someone decides it should. Routines here are INVOKER-rights
--- (the PostgreSQL default), so they run with the caller's privileges and the
--- caller still needs table access.
-GRANT INSERT, UPDATE, DELETE ON
+-- ── Write access ───────────────────────────────────────────────────────────
+-- Granted per verb, not per table. Every line below corresponds to a statement
+-- that actually exists in Programmability/; a verb no routine uses is a verb an
+-- attacker holding these credentials gets for free.
+--
+-- The routines are INVOKER-rights (the PostgreSQL default), so they run with
+-- the caller's privileges and the caller still needs table access. That is the
+-- point: the grants stay meaningful instead of being bypassed by SECURITY
+-- DEFINER.
+
+-- Rows are created and amended, never removed. These are the records whose
+-- disappearance would itself be the incident.
+GRANT INSERT, UPDATE ON
     tbl_clients,
     tbl_products,
     tbl_users,
     tbl_user_sessions,
-    tbl_client_products,
-    tbl_product_permissions,
-    tbl_linked_identities,
-    tbl_invitations,
-    tbl_invitation_products,
-    tbl_authorization_codes,
-    tbl_groups,
-    tbl_group_features,
-    tbl_user_groups,
-    tbl_password_reset_tokens
+    tbl_invitations
 TO alora_app;
+
+-- Short-lived rows that are meant to be destroyed: a code is deleted the moment
+-- it is redeemed, a reset token when it is used, a group when it is removed.
+GRANT INSERT, UPDATE, DELETE ON
+    tbl_authorization_codes,
+    tbl_password_reset_tokens,
+    tbl_groups
+TO alora_app;
+
+-- Membership and grant rows. Revoking is a delete; nothing edits them in place,
+-- so UPDATE is withheld -- it would let a permission be rewritten without the
+-- revoke-then-grant that the audit trail records.
+GRANT INSERT, DELETE ON
+    tbl_product_permissions,
+    tbl_group_features,
+    tbl_user_groups
+TO alora_app;
+
+-- Write-once. A linked Google identity and an invitation's product list are
+-- established at creation and never edited afterwards.
+GRANT INSERT ON
+    tbl_linked_identities,
+    tbl_invitation_products
+TO alora_app;
+
+-- tbl_client_products is deliberately absent: no routine writes it. Subscribing
+-- a tenant to a product is provisioning, not part of the API surface, so
+-- cmd/bootstrap performs it and must connect as the OWNER rather than as this
+-- role. Pointing bootstrap at alora_app fails here, on purpose.
 
 -- ── The audit trail: INSERT ONLY ────────────────────────────────────────────
 -- This is the point of the whole file. An append-only trail the application can
 -- rewrite is not an audit trail, and "we only wrote an insert procedure" is a
--- convention, not an enforcement mechanism. Note tbl_audit_logs is absent from
--- the write grant above; this makes the intent explicit and survives someone
--- adding it there by accident.
+-- convention, not an enforcement mechanism. The REVOKE is redundant with the
+-- grants above and is kept anyway: it states the intent, and it survives
+-- someone adding this table to one of those lists by accident.
 REVOKE UPDATE, DELETE ON tbl_audit_logs FROM alora_app;
 GRANT  INSERT           ON tbl_audit_logs TO   alora_app;
+
+-- These grants alone are NOT sufficient. A referential action runs as the
+-- referencing table's owner, so an ON DELETE SET NULL pointing at this table
+-- would rewrite audit rows no matter what is revoked here -- deleting a user
+-- would erase them from the trail while every direct UPDATE stayed denied.
+-- That is why the actor foreign key is ON DELETE RESTRICT, and why DELETE on
+-- tbl_users is not granted above: the two together are what make this table
+-- append-only in fact rather than by intention.
 
 -- ── Migrations ledger: owner only ───────────────────────────────────────────
 -- Migrations run as the schema owner. The application has no business reading or
@@ -122,5 +157,26 @@ BEGIN
         RAISE EXCEPTION 'alora_app still holds % on tbl_audit_logs', v_bad;
     END IF;
 
-    RAISE NOTICE 'alora_app configured: audit trail is INSERT-only.';
+    -- The indirect route. DELETE on tbl_users plus an ON DELETE SET NULL actor
+    -- key erases the trail without touching tbl_audit_logs at all, so checking
+    -- the audit grants alone would certify a database that is still exposed.
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_privileges
+        WHERE  grantee = 'alora_app' AND table_name = 'tbl_users'
+          AND  privilege_type = 'DELETE'
+    ) THEN
+        RAISE EXCEPTION
+            'alora_app holds DELETE on tbl_users: deleting a user would erase them from the audit trail';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE  conname = 'fk_tbl_audit_logs_tbl_users_actor_user_id'
+          AND  confdeltype = 'r'   -- r = RESTRICT
+    ) THEN
+        RAISE EXCEPTION
+            'audit actor FK is not ON DELETE RESTRICT: apply Migrations/0001_audit_actor_restrict.sql';
+    END IF;
+
+    RAISE NOTICE 'alora_app configured: audit trail is INSERT-only and cannot be erased by deleting a user.';
 END $$;

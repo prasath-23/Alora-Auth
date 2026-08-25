@@ -7,7 +7,9 @@ cd "$(dirname "$0")/.."
 # Host port for the throwaway PostgreSQL. Overridable because Windows can reserve
 # a port into its dynamic-exclusion range, after which binding fails even though
 # nothing is listening ("access permissions" from docker). Pick another and go.
-DB_PORT="${ALORA_DB_PORT:-55532}"
+# 55533, not the e2e stack's 55532: the README has you run both, and two
+# containers cannot share a port. Overridable, like the others.
+DB_PORT="${ALORA_DB_PORT:-55533}"
 
 # Path conversion is disabled ONLY for docker, whose container-side paths must
 # stay POSIX. Exporting it globally breaks native Windows binaries such as

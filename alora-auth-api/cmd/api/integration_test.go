@@ -5,7 +5,7 @@ package main
 // Skipped unless ALORA_TEST_DB points at a migrated Postgres, keeping
 // `go test ./...` green on a machine without Docker:
 //
-//	ALORA_TEST_DB=postgres://postgres:test@127.0.0.1:55432/alora_test go test ./cmd/api -v
+//	ALORA_TEST_DB=postgres://postgres:test@127.0.0.1:55533/alora_test go test ./cmd/api -v
 
 import (
 	"context"

@@ -16,7 +16,7 @@ A migration is for a change that **cannot be re-run safely**:
 
 ```
 NNNN_short_description.sql
-0001_example_backfill.sql
+0007_backfill_user_timezones.sql
 ```
 
 Four-digit sequence, applied in filename order. Never renumber or edit an applied
@@ -35,12 +35,11 @@ changed, because a silent edit leaves environments diverged with no signal.
 
 ## Current state
 
-This folder is intentionally EMPTY. Nothing has needed a run-once migration yet:
-every change so far has been expressible as an edit to an idempotent object
-script. The first entry will most likely be a column rename or a backfill after
-the first production deployment.
+| Migration | Why it could not be an object-script edit |
+|---|---|
+| `0001_audit_actor_restrict.sql` | Changes an existing foreign key's delete action. The table script is guarded on `conname` and skips a constraint that already exists, so a built database would never pick the change up. |
 
-## Running
-
-`migrate.sh` applies the object build first, then any pending migrations, and
-records each in `tbl_schema_migrations`.
+`0001` closes a real hole: the audit actor key was `ON DELETE SET NULL`, which
+let a user deletion rewrite existing audit rows and erase who performed each
+action. Revoking `UPDATE` does not prevent it — a referential action runs as the
+referencing table's owner and never consults the caller's grants.

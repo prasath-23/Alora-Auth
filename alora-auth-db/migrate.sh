@@ -19,7 +19,7 @@ TARGET="${DATABASE_URL:-}"
 # Host port for --docker. Overridable because Windows can reserve a port into its
 # dynamic-exclusion range, after which binding fails even though nothing is
 # listening ("access permissions" from docker). Pick another and go.
-DB_PORT="${ALORA_DB_PORT:-55532}"
+DB_PORT="${ALORA_DB_PORT:-55534}"
 
 for arg in "$@"; do
   case "$arg" in

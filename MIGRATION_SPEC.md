@@ -212,4 +212,4 @@ Repos wrap `*Queries` + `*pgxpool.Pool` for `WithTx(tx)`. DTOs (binding tags) an
 13. **permissions_version** — atomic `SET pv = pv + 1`.
 14. **Case-insensitive email/domain/group-name** — `lower()` before insert AND in WHERE; escape `%`/`_` in ILIKE.
 15. **Cookie Secure flag env-gated**; clear-cookie attrs must exactly match set. **No `__Host-` prefix.**
-16. **DEFERRABLE INITIALLY DEFERRED** on auditlog FK — preserve; audit table append-only (never emit ON CONFLICT/UPDATE/DELETE).
+16. **DEFERRABLE INITIALLY DEFERRED** on the auditlog composite FK — preserve; audit table append-only (never emit ON CONFLICT/UPDATE/DELETE). The single-column actor FK must be **ON DELETE RESTRICT**, never SET NULL: a referential action bypasses the caller's grants, so SET NULL erases the actor from existing rows when a user is deleted.

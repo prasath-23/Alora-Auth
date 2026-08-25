@@ -382,7 +382,7 @@
 | client_products CASCADE | 259 | Pure join rows | Unreachable + inconsistent with its RESTRICT siblings | None |
 | self-FK `replaced_by_id` SET NULL | 257 | Only viable action for a nullable forward pointer | already optimal | Rotation history erased |
 | invitations inviter RESTRICT vs acceptor SET NULL | 269-270 | Deliberate: inviter is accountability, acceptor is the user themselves | Comment the reasoning locally | Insider erases the admission trail |
-| audit actor SET NULL + client RESTRICT | 275-276 | SPEC §2/#16; enables the deferred composite check | **Contradicts ARCH's "append-only"** — this generates a DB-side UPDATE; add REVOKE | Deleting a user erases their trail |
+| audit actor RESTRICT + client RESTRICT | 275-276 | SPEC §2/#16; keeps every audit row attributable | **RESOLVED** — was SET NULL, which let a user deletion rewrite audit rows. A REVOKE does *not* fix it: referential actions run as the referencing table's owner and skip the caller's grants. Now RESTRICT, plus no DELETE grant on `tbl_users`. Migration `0001`; regression tests in `cmd/api/schema_invariants_test.go` | Deleting a user erases their trail |
 | auth_codes user_id/product_id RESTRICT | 278-279 | Protects in-flight codes | user_id should be CASCADE — RESTRICT makes user deletes transiently fail | Transient delete failure |
 | RESTRICT → products ×4 | 260,264,273,278 | Keeps the token-mint INNER JOIN loss-free | already optimal | One delete revokes access across all tenants silently |
 | group_features / user_groups CASCADE | 282,284 | Deleting a group instantly revokes its features | already optimal | Orphans that re-grant on id reuse |

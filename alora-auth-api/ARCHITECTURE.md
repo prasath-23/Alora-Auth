@@ -182,7 +182,10 @@ request-id (uuid)
   (`change-this`,`your-`,`placeholder`,`TODO`,`CHANGEME`) rejected; `COOKIE_SECRET ≥ 32 bytes`.
 - **Log redaction is a security control:** auth/cookie/set-cookie headers and secret body fields are
   redacted; pgx query logging is OFF (queries carry hashed tokens).
-- **Audit** is append-only (no UPDATE/DELETE path ever generated for `tbl_audit_logs`) and written
+- **Audit** is append-only, and enforced rather than assumed: the application role holds `INSERT`
+  only, and the actor foreign key is `ON DELETE RESTRICT` so a user with history cannot be deleted.
+  Both are needed — a referential action runs as the referencing table's owner, so `SET NULL` there
+  would erase the actor from existing rows no matter what is revoked. Written
   fire-and-forget on `context.Background()` so it can neither block nor fail a request.
 
 ---

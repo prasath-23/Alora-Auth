@@ -178,6 +178,18 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v app_password="'…'" -f Security/role
 # then: DATABASE_URL=postgres://alora_app:…@host:5432/alora
 ```
 
+Two controls, and both are required. The role holds `INSERT` on `tbl_audit_logs`
+and nothing else; and the trail's actor key is `ON DELETE RESTRICT`, so a user
+who has done anything cannot be deleted. Without the second, the first is
+theatre — a referential action runs as the referencing table's owner, so
+deleting a user would strip the actor from existing audit rows while every
+direct `UPDATE` stayed denied. `roles.sql` refuses to finish if either has
+drifted.
+
+`cmd/bootstrap` still connects as the **owner**: subscribing a tenant to a
+product is provisioning, and `alora_app` deliberately cannot write
+`tbl_client_products`.
+
 **Set `TRUSTED_PROXIES`** to your load balancer's CIDRs. It defaults to trusting
 nothing; leaving it empty behind a proxy makes every client look like the proxy
 and collapses per-IP rate limiting.

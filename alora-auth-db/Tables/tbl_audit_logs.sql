@@ -27,19 +27,38 @@ DO $$ BEGIN
             ON DELETE RESTRICT;
     END IF;
 END $$;
+--
+-- RESTRICT, NOT SET NULL. This was SET NULL, and that quietly defeated the
+-- whole table: deleting a user made PostgreSQL rewrite existing audit rows and
+-- erase WHO performed each action. Revoking UPDATE on this table does not
+-- prevent it, because a referential action runs as the referencing table's
+-- owner rather than as the caller -- verified against PostgreSQL 16, where the
+-- app role was refused a direct UPDATE and then erased the same column anyway
+-- by deleting the user.
+--
+-- With RESTRICT, a user who has done anything cannot be hard-deleted at all.
+-- That costs nothing: every procedure here soft-deletes (deleted_at) and no
+-- code path in this system hard-deletes a user. Erasure requests are served by
+-- scrubbing the PII on tbl_users while the actor linkage stays intact, which
+-- is the outcome you want anyway -- "some deleted account did this" is not an
+-- audit trail.
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_audit_logs_tbl_users_actor_user_id') THEN
         ALTER TABLE tbl_audit_logs ADD CONSTRAINT FK_tbl_audit_logs_tbl_users_actor_user_id
             FOREIGN KEY (actor_user_id) REFERENCES tbl_users (id)
-            ON DELETE SET NULL;
+            ON DELETE RESTRICT;
     END IF;
 END $$;
 --
--- TENANT ISOLATION for a nullable actor. ON DELETE SET NULL is impossible
--- here: it would null client_id too, which is NOT NULL. Instead the
--- single-column actor FK nulls the actor first, and MATCH SIMPLE lets this
--- composite pass once actor_user_id IS NULL. DEFERRABLE so the check runs at
--- COMMIT, after that SET NULL has applied.
+-- TENANT ISOLATION. Stops an audit row naming an actor from one tenant against
+-- another tenant's client_id. MATCH SIMPLE (the default) skips the check when
+-- actor_user_id IS NULL, which is what lets unauthenticated events -- a failed
+-- login, a password-reset request -- be recorded with no actor.
+--
+-- NO ACTION rather than a cascade: the single-column FK above is RESTRICT, so
+-- a delete is refused before this constraint is ever consulted. DEFERRABLE is
+-- kept so a procedure may insert the audit row and the user row in either
+-- order within one transaction.
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_audit_logs_tbl_users_actor_user_id_client_id') THEN
         ALTER TABLE tbl_audit_logs ADD CONSTRAINT FK_tbl_audit_logs_tbl_users_actor_user_id_client_id
