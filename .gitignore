@@ -1,0 +1,38 @@
+# ── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+/vendor/
+
+# ── Build output ────────────────────────────────────────────────────────────
+*.exe
+*.exe~
+*.dll
+*.test
+*.out
+dist/
+build/
+
+# ── Secrets / local environment ─────────────────────────────────────────────
+# .env holds real credentials and signing keys; only the example is tracked.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── Test artefacts ──────────────────────────────────────────────────────────
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# ── OS / IDE ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+*.log
+
+# NOTE: sqlc-generated code under alora-auth-api/internal/platform/database/sqlc
+# IS tracked, so a fresh clone builds without running codegen.

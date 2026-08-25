@@ -1,0 +1,36 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    # The database lives in its own repository (alora-auth-db), which is the
+    # single source of truth for schema and stored procedures. Paths are listed
+    # explicitly rather than pointing at the repo root, because build.sql
+    # contains psql \ir meta-commands sqlc cannot parse.
+    # Order matters: types before tables, tables before views, views before the
+    # functions that return SETOF them.
+    schema:
+      - "../alora-auth-db/Programmability/Types"
+      - "../alora-auth-db/Tables"
+      - "../alora-auth-db/Views"
+      - "../alora-auth-db/Programmability/Functions/Scalar-valued Functions"
+      - "../alora-auth-db/Programmability/Functions/Table-valued Functions"
+      - "../alora-auth-db/Programmability/StoredProcedures"
+    # The API's entire database surface. Every entry is a CALL of a procedure or a
+    # SELECT from a function — there is no statement here that touches a table
+    # directly, which is what keeps query logic in the database.
+    queries: "../alora-auth-db/api"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/platform/database/sqlc"
+        sql_package: "pgx/v5"
+        emit_interface: true       # Querier interface, for mocking and WithTx
+        emit_empty_slices: true    # list calls return [] not nil, so JSON is clean
+        overrides:
+          # Both entries are required: without the nullable variant a NULL jsonb
+          # column generates as []byte while a non-null one generates as
+          # json.RawMessage.
+          - db_type: "jsonb"
+            go_type: "encoding/json.RawMessage"
+          - db_type: "jsonb"
+            nullable: true
+            go_type: "encoding/json.RawMessage"
