@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  // Backend target: the Go/Gin API (alora-auth-go), which listens on :3001.
+  // Backend target: the Go/Gin API (alora-auth-api), which listens on :3001.
   // Override via VITE_API_URL in .env.local, e.g. VITE_API_URL=http://127.0.0.1:4001
   const apiTarget = env.VITE_API_URL || 'http://127.0.0.1:3001'
 

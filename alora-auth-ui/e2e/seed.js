@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+// Resolved from this file rather than process.cwd(): a relative cwd that does
+// not exist makes Node report ENOENT against the COMMAND, which reads as
+// "go is not installed" and sends you looking in the wrong place entirely.
+const API_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'alora-auth-api')
 
 // Seeding talks to Postgres directly rather than through the API: creating the
 // FIRST tenant and its first admin is a bootstrap operation the API deliberately
@@ -9,10 +16,12 @@ const CONTAINER_DB = ['-U', 'postgres', '-d', 'alora_e2e']
 let _cid = null
 function containerId() {
   if (_cid) return _cid
-  _cid = execFileSync('docker', ['ps', '-q', '--filter', 'publish=55432'], { encoding: 'utf8' })
+  // Must match ALORA_DB_PORT in the API's scripts (default 55532).
+  const port = process.env.ALORA_DB_PORT || '55532'
+  _cid = execFileSync('docker', ['ps', '-q', '--filter', `publish=${port}`], { encoding: 'utf8' })
     .trim().split(/\r?\n/)[0]
   if (!_cid) {
-    throw new Error('e2e Postgres is not running — run: bash ../alora-auth-go/scripts/e2e-up.sh')
+    throw new Error('e2e Postgres is not running — run: bash ../alora-auth-api/scripts/e2e-up.sh')
   }
   return _cid
 }
@@ -52,7 +61,7 @@ export function seedTenant({ password = 'e2e-Password-123' } = {}) {
   // hashed with EXACTLY the argon2id parameters the API verifies against —
   // a hard-coded hash would silently rot if those parameters ever changed.
   const passwordHash = execFileSync('go', ['run', './internal/tools/hashpw', password], {
-    cwd: '../alora-auth-go', encoding: 'utf8',
+    cwd: API_DIR, encoding: 'utf8',
   }).trim()
 
   const userId = psql(

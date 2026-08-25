@@ -113,7 +113,7 @@ Runs in a pgx tx with `SELECT ... WHERE refresh_token_hash=$1 FOR UPDATE` (**no 
 
 ## 4. Proposed Go package layout (package-by-feature)
 ```
-alora-auth-go/
+alora-auth-api/
 ├── cmd/api/main.go                  # load config, jwt.init() once, pool, start jobs after listen, signal shutdown
 ├── internal/
 │   ├── config/config.go             # env load + fail-fast validate, prod placeholder/length guards, \n→newline PEM

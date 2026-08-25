@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "e2e:up": "bash ../alora-auth-go/scripts/e2e-up.sh",
-    "e2e:down": "bash ../alora-auth-go/scripts/e2e-up.sh --down"
+    "e2e:up": "bash ../alora-auth-api/scripts/e2e-up.sh",
+    "e2e:down": "bash ../alora-auth-api/scripts/e2e-up.sh --down"
   },
   "dependencies": {
     "react": "^18.3.1",

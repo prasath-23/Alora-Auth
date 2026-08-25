@@ -6,7 +6,7 @@ Drives the real React SPA against the real Go/Gin API and a real Postgres.
 
 ```bash
 # 1. Database (throwaway container) + migrations
-bash ../alora-auth-go/scripts/e2e-up.sh
+bash ../alora-auth-api/scripts/e2e-up.sh
 
 # 2. Tests (Vite starts automatically)
 npx playwright test
