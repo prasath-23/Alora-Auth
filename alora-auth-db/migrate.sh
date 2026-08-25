@@ -16,6 +16,11 @@ cd "$(dirname "$0")"
 MODE=apply
 TARGET="${DATABASE_URL:-}"
 
+# Host port for --docker. Overridable because Windows can reserve a port into its
+# dynamic-exclusion range, after which binding fails even though nothing is
+# listening ("access permissions" from docker). Pick another and go.
+DB_PORT="${ALORA_DB_PORT:-55532}"
+
 for arg in "$@"; do
   case "$arg" in
     --status) MODE=status ;;
@@ -33,13 +38,13 @@ trap cleanup EXIT
 
 if [ "$MODE" = docker ]; then
   echo "==> starting throwaway PostgreSQL"
-  CONTAINER=$(MSYS_NO_PATHCONV=1 docker run -d --rm -p 55432:5432 \
+  CONTAINER=$(MSYS_NO_PATHCONV=1 docker run -d --rm -p "$DB_PORT":5432 \
     -e POSTGRES_PASSWORD=test -e POSTGRES_DB=alora postgres:16-alpine)
   for _ in $(seq 1 40); do
     sleep 2
     MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" pg_isready -U postgres -d alora >/dev/null 2>&1 && break
   done
-  TARGET="postgres://postgres:test@127.0.0.1:55432/alora"
+  TARGET="postgres://postgres:test@127.0.0.1:$DB_PORT/alora"
   MODE=apply
 fi
 

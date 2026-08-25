@@ -7,6 +7,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Host port for the throwaway PostgreSQL. Overridable because Windows can reserve
+# a port into its dynamic-exclusion range, after which binding fails even though
+# nothing is listening ("access permissions" from docker). Pick another and go.
+DB_PORT="${ALORA_DB_PORT:-55532}"
+
 # Path conversion is disabled ONLY for docker, whose container-side paths must
 # stay POSIX. Exporting it globally would break native Windows binaries like
 # openssl, which need a converted host path for -out.
@@ -24,7 +29,7 @@ if [ "${1:-}" = "--down" ]; then
 fi
 
 echo "==> starting postgres"
-CID=$(d run -d --rm -p 55432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=alora_e2e postgres:16-alpine)
+CID=$(d run -d --rm -p "$DB_PORT":5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=alora_e2e postgres:16-alpine)
 echo "$CID" > "$STATE_DIR/cid"
 for _ in $(seq 1 40); do sleep 2; d exec "$CID" pg_isready -U postgres -d alora_e2e >/dev/null 2>&1 && break; done
 
@@ -42,7 +47,7 @@ echo "==> building + starting the API on :3001"
 go build -o "$STATE_DIR/api.exe" ./cmd/api
 NODE_ENV=development \
 PORT=3001 HOST=127.0.0.1 \
-DATABASE_URL="postgres://postgres:test@127.0.0.1:55432/alora_e2e" \
+DATABASE_URL="postgres://postgres:test@127.0.0.1:$DB_PORT/alora_e2e" \
 JWT_PRIVATE_KEY="$(cat "$STATE_DIR/priv.pem")" \
 JWT_PUBLIC_KEY="$(cat "$STATE_DIR/pub.pem")" \
 JWT_KEY_ID=e2e-key JWT_ISSUER=https://auth.alora.test \
@@ -60,6 +65,6 @@ done
 curl -sf http://127.0.0.1:3001/health >/dev/null || { echo "API failed to start:"; cat "$STATE_DIR/api.log"; exit 1; }
 
 echo "==> ready"
-echo "    postgres : 127.0.0.1:55432 (db alora_e2e)"
+echo "    postgres : 127.0.0.1:$DB_PORT (db alora_e2e)"
 echo "    api      : http://127.0.0.1:3001"
 echo "    log      : $STATE_DIR/api.log"
