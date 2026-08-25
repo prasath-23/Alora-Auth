@@ -66,7 +66,7 @@
 | Construct | Line | Why | Optimization | If absent |
 |---|---|---|---|---|
 | internal `package config` | 1-3 | Reaches unexported helpers | Access unused — all tests go via `Load()` | No test binary |
-| `setValidEnv` + 10 `t.Setenv` + 34-char secret | 8-20 | `t.Setenv` auto-restores; secret clears the 32 floor | **NOT HERMETIC** — `PORT=8080 go test` fails; neutralise every optional var | Duplicated setup drift |
+| `setValidEnv` + `t.Setenv` + 34-char secret | 8-20 | `t.Setenv` auto-restores; secret clears the 32 floor | **RESOLVED** — was not hermetic (`PORT=8080 go test` failed). Now clears all 18 optional vars; verified green under a hostile environment | Duplicated setup drift |
 | `TestLoadOK` (Port/APIAudience/IsProd) | 22-37 | Pins the 3 parity-critical values | Asserts 3 of ~20; pin Host/RefreshTTL/AccessTTL/rate limits | Silent default drift |
 | `TestLoadPEMNewlineNormalization` | 39-49 | Highest-value test: guards backtick-vs-escape trap | Covers only PRIVATE key; add PUBLIC | normalizePEM silently becomes identity |
 | `TestLoadMissingRequired` | 51-57 | Pins set-but-empty==missing coupling | Loop `requiredEnv`; assert message names the var | 8 entries could be deleted silently |
@@ -93,7 +93,7 @@
 | `pem.Decode` nil guard | 56-60,72-76 | `block.Bytes` on nil panics; discarding `rest` is correct | Also reject non-empty `rest` and check `block.Type` | nil-deref crash-loop at startup |
 | `ParsePKCS8` / `ParsePKIX` | 61,77 | Matches doc + test helper + modern OpenSSL default | Fall back to PKCS1 for legacy `openssl genrsa` | No path from PEM to key |
 | comma-ok `*rsa.*` assertions | 65-68,81-84 | First half of the RS256 pin — non-RSA key cannot enter the store | already optimal as a type gate | Panic on ECDSA key; silent total outage |
-| **MISSING** modulus floor | 56-86 | n/a — jwk's own validateRSAKey declines to check length | Add `N.BitLen() < 2048` reject | 512-bit key published via JWKS, factored → total forgery |
+| Modulus floor + keypair match | 56-86 | jwk's validateRSAKey checks structure, not strength | **RESOLVED** — `Init` rejects under 2048 bits, and rejects a public key that is not the private key's counterpart (otherwise every login succeeds and every request after it 401s) | Weak key published via JWKS, factored → total forgery |
 | `Sign(subject,claims,ttl,audience)` | 91 | Mirrors SPEC §2; `[]string` aud for `["product:<key>",api]` | Replace `map[string]any` with a typed struct | No token minting at all |
 | RLock snapshot of kp/kid/iss | 92-95 | Consistent triple; lock released before RSA modexp | already optimal | Torn kid/key → self-rejected tokens |
 | `if !ok { "not initialized" }` | 96-98 | Fail-closed zero state; avoids nil `kp.priv` deref | already optimal | Panic per request = DoS |
@@ -169,7 +169,7 @@
 | `DummyHash() string` | 70 | SPEC §2 anti-enumeration — equalises the missing-user path | already optimal in shape | Full user enumeration by timing |
 | `dummyOnce.Do` | 71 | Exactly one computation under concurrency | **FAIL-OPEN** — `Once` latches even if `f()` panics; Gin Recovery would leave `dummyHash==""` forever | Concurrent first-callers race |
 | `make([]byte,32)` | 72 | 256-bit unguessable dummy plaintext | Reuse tokens pkg | Known dummy plaintext |
-| `rand.Read` err → panic | 73-75 | Intended entropy fail-fast | **DEAD** — go1.26 `rand.Read` never errors | None |
+| `rand.Read` err → panic | 73-75 | Intended entropy fail-fast | **DEAD but KEPT** — go1.26 `rand.Read` never errors, so this cannot fire. Removing it costs signature churn across every caller to delete a zero-cost branch, and re-adds risk if the guarantee is ever narrowed | None |
 | `hex.EncodeToString` + **same params** | 76 | Params reuse is what makes timing identical across both paths | already optimal | Timing oracle returns |
 | `panic("failed to compute dummy hash")` | 80 | Refuse to serve with the control disabled | Only safe if `Warm()` runs at startup — it has **zero callers** | Returns "" silently → enumeration |
 | write inside Do / read outside | 82,84 | Once's release/acquire makes the read race-free | Add post-Do `dummyHash == ""` check | Recompute per call / data race |
@@ -197,7 +197,7 @@
 | sha256/hex/base64 imports | 10-12 | hex is lowercase by construction; base64url for URL-borne secrets | already optimal | Compile error |
 | `const tokenBytes = 32` | 15 | 256 bits; Node byte-parity so old hashes stay valid; fixes 64-hex/43-b64url lengths | Export `RefreshTokenLen`/`OpaqueLen` — derived lengths are re-typed as magic numbers elsewhere | Guessable refresh tokens |
 | `randomBytes(n)` + `make` | 17-18 | Single CSPRNG funnel; `make` pre-sizes because Read fills len | `n` is unused generality; add a `n>=16` floor | Empty tokens = universal bypass |
-| `rand.Read` err branch | 19-21 | Claimed defensive propagation | **PROVABLY DEAD** on go1.26; drop the error from all 3 generators | None |
+| `rand.Read` err branch | 19-21 | Claimed defensive propagation | **DEAD but KEPT** — provably unreachable on go1.26. Dropping the error would change three public signatures and every call site to remove an unreachable branch; declined deliberately rather than overlooked | None |
 | `return b, nil` unpooled | 22 | No reuse → no entropy sharing between requests | already optimal (do not pool) | Compile error |
 | `GenerateRefreshToken` shape | 26,28-30 | Raw returned, hash persisted; `""` on error cannot collide | Rename to `GenerateHex` — the name is why invites call it | Non-empty fallback = universal token |
 | `hex.EncodeToString` for refresh | 31 | SPEC §2 wire-format parity; conservative cookie alphabet | Honest: hex buys **zero** security over base64url, costs 21 bytes | Node parity lost |
@@ -279,10 +279,10 @@
 | `Enabled()` + two guards | 25,28-30,46-48 | Node byte-parity; §3 email must never block/500 | Host-only gate — MAIL_USER/PASS unchecked; Secure derived from the raw env string | CI and dev fail on every invite |
 | `Format("2 January 2006[, 15:04]")` | 31,49 | Reproduces `toLocaleDateString('en-GB')` | **No timezone rendered** — misleading on a 60-min reset deadline | Users click stale links |
 | From fallback `%q <user>` | 32-35,50-53 | Node parity; name-addr form | `%q` is Go-syntax quoting — accidentally CRLF-safe, wrong for non-ASCII. Use `mail.Address.String()` | Empty From → rejected as spam |
-| Subject built by concatenation | 42,81 | Required header | **EXPLOITABLE HEADER INJECTION** — tenant-controlled clientName, no CRLF strip; net/smtp guards only the envelope | (defect is the missing sanitisation) |
+| Subject built by concatenation | 42,81 | Required header | **RESOLVED** — `sanitizeHeader` strips CR/LF/NUL from From, To and Subject. The HTML body was a second route: `clientName` is tenant-controlled and was interpolated raw, so an organisation name could open a link in someone else's inbox under our DKIM signature. Now `html.EscapeString` | Header injection; forged links in invitations |
 | HTML bodies by raw concatenation | 38-41,56-59 | multipart/alternative half; inline styles for mail clients | **Phishing vector** — attacker `<a href>` inside DKIM-aligned mail; use `html/template` | Text-only mail |
 | `smtp.PlainAuth(...)` unconditional | 66 | PLAIN over TLS; host arg binds the credential to MAIL_HOST | **Non-nil even with empty user** → "server doesn't support AUTH" on MailHog/Postfix. Guard on `User != ""` | 530 on authenticated relays |
-| `envelopeFrom := m.cfg.User` | 67 | Reverse-path must be a bare address | **WRONG SOURCE** — SendGrid's user is `apikey`; breaks SPF/DMARC alignment; empty user sends `MAIL FROM:<>` | Protocol error |
+| `envelopeFrom := envelopeAddress(...)` | 67 | Reverse-path must be a bare address | **RESOLVED** — was `m.cfg.User`, which on SendGrid is the literal `apikey` and on an empty config sends `MAIL FROM:<>` (the null sender reserved for bounces). Now parsed from the From header, username only as fallback | Rejected mail, or SPF/DMARC misalignment → silent spam-foldering |
 | `send()` + JoinHostPort + Secure branch | 63-74 | IPv6-safe; 465 implicit TLS vs 587 STARTTLS is a real protocol difference | STARTTLS is **opportunistic** — a stripping MITM keeps cleartext; fails closed only by PlainAuth accident | 465 deadlocks |
 | `buildMIME` + static boundary | 76-92 | Correct RFC 2046 part order and delimiters | **Source-published constant boundary** + attacker-controlled parts = MIME injection. Use `mime/multipart` | Bare body, universally rejected |
 | header writes | 79-83 | Minimum renderable set | **Missing mandatory `Date:`**, Message-ID, Content-Transfer-Encoding, RFC 2047 encoding; 998-octet line limit | Deliverability loss on onboarding/recovery mail |
@@ -609,7 +609,7 @@
 | `WHERE pp.user_id=$1 AND pp.client_id=$2` | 27-28 | Tenant isolation on the token-mint path; exact index prefix | already optimal | Cross-tenant 'Admin' injected into a signed JWT |
 | `(valid_until IS NULL OR valid_until > now())` | 29 | Time-boxed grants lapse without a sweeper | **Unreachable-false** — no query ever writes valid_until; `valid_from` checked nowhere | Expired grant minted forever |
 | no ORDER BY / LIMIT | 22-29 | Rows fold into a map | Bounded by global catalog size — roles claim can bloat a 4 KB cookie | Wasted sort |
-| **MISSING**: a token-mint identity query | — | n/a (critic) | Add `GetUserForTokenMint :one … WHERE id=$1 AND is_active AND deleted_at IS NULL` | /auth/token must use `SELECT *` (drags password_hash) or a projection lacking client_id/email |
+| Token-mint identity query | — | n/a (critic) | **ALREADY PRESENT** — `vw_UserIdentity` is that projection: id/client_id/email/is_global_admin/permissions_version, liveness in the view, `password_hash` deliberately excluded. Reached via `udf_GetUserIdentityForToken` | /auth/token would otherwise drag password_hash or lack client_id/email |
 
 ### 2.25 `db/queries/audit.sql` + `procs.sql`
 

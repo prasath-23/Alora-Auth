@@ -70,3 +70,42 @@ func TestBuildMIMEStructure(t *testing.T) {
 		}
 	}
 }
+
+// The envelope sender (MAIL FROM) is not the SMTP username. Providers use a
+// token there — SendGrid's is the literal "apikey" — and a reverse-path that is
+// not a mailbox either bounces or fails SPF/DMARC alignment, which delivers to
+// spam while every log line says success.
+func TestEnvelopeAddressPrefersTheFromHeader(t *testing.T) {
+	cases := []struct {
+		name, fromHeader, user, want string
+	}{
+		{"display name is stripped", `"Acme Corp" <no-reply@acme.com>`, "apikey", "no-reply@acme.com"},
+		{"bare address passes through", "no-reply@acme.com", "apikey", "no-reply@acme.com"},
+		{"username is only a fallback", "", "smtp-login@acme.com", "smtp-login@acme.com"},
+		{"unparseable header falls back", "not an address", "smtp-login@acme.com", "smtp-login@acme.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := envelopeAddress(tc.fromHeader, tc.user); got != tc.want {
+				t.Fatalf("envelopeAddress(%q, %q) = %q, want %q", tc.fromHeader, tc.user, got, tc.want)
+			}
+		})
+	}
+}
+
+// An organisation name is chosen by a tenant admin and rendered in mail sent to
+// people who are not yet users. Unescaped, it is markup in a stranger's inbox
+// carrying our From address and DKIM signature.
+func TestInvitationEscapesTheTenantName(t *testing.T) {
+	m := New(config.MailConfig{Host: "smtp.test", Port: 587, User: "u", From: "no-reply@alora.test"})
+
+	hostile := `Acme</strong></p><p><a href="https://evil.test">Verify now</a><p>`
+	body := m.invitationHTML(hostile, "https://auth.test/invite?token=abc", "1 January 2027")
+
+	if strings.Contains(body, `href="https://evil.test"`) {
+		t.Fatalf("tenant name injected a live link into the invitation body:\n%s", body)
+	}
+	if !strings.Contains(body, "&lt;/strong&gt;") {
+		t.Fatalf("tenant name was not escaped:\n%s", body)
+	}
+}

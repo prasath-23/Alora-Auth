@@ -5,6 +5,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,4 +167,66 @@ func TestJWKS(t *testing.T) {
 	if set.Len() < 1 {
 		t.Error("empty JWKS")
 	}
+}
+
+// A weak key is not a configuration preference. The public half is served from
+// /.well-known/jwks.json, so anything short enough to factor hands an attacker
+// the ability to mint valid tokens for any user in any tenant.
+func TestInitRejectsUndersizedKey(t *testing.T) {
+	// 1024 and the boundary case. Anything smaller cannot be constructed here --
+	// Go's own crypto/rsa refuses to generate below 1024 -- but such a key can
+	// still arrive as a PEM from an old openssl, which is what the floor in Init
+	// is actually guarding against.
+	for _, bits := range []int{1024, 2047} {
+		t.Run(fmt.Sprintf("%d-bit", bits), func(t *testing.T) {
+			key, err := rsa.GenerateKey(rand.Reader, bits)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			privPEM, pubPEM := pemPair(t, key)
+
+			if err := Init(privPEM, pubPEM, "weak-kid", "https://auth.test"); err == nil {
+				t.Fatalf("accepted a %d-bit signing key; it would be published via JWKS "+
+					"and can be factored into a token-forging capability", bits)
+			} else if !strings.Contains(err.Error(), "minimum is 2048") {
+				t.Fatalf("error %q does not say what the requirement is", err)
+			}
+		})
+	}
+}
+
+// Two valid keys that are not a pair produce a system where logins succeed and
+// every request afterwards is rejected — a failure whose symptom points nowhere
+// near the cause.
+func TestInitRejectsMismatchedPair(t *testing.T) {
+	a, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	b, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	privPEM, _ := pemPair(t, a)
+	_, pubPEM := pemPair(t, b)
+
+	if err := Init(privPEM, pubPEM, "mismatch-kid", "https://auth.test"); err == nil {
+		t.Fatal("accepted a public key that is not the private key's counterpart")
+	} else if !strings.Contains(err.Error(), "counterpart") {
+		t.Fatalf("error %q does not identify the mismatch", err)
+	}
+}
+
+func pemPair(t *testing.T, key *rsa.PrivateKey) (privPEM, pubPEM string) {
+	t.Helper()
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal private: %v", err)
+	}
+	pubDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal public: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})),
+		string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubDER}))
 }

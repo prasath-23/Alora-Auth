@@ -5,11 +5,30 @@ import (
 	"testing"
 )
 
-// setValidEnv sets every required variable to a valid dummy so Load succeeds;
-// individual tests then override one to exercise a failure path. t.Setenv
-// restores the previous value automatically.
+// setValidEnv puts Load into a known-good state: every required variable set to
+// a valid dummy, and every OPTIONAL one explicitly cleared. Individual tests
+// then override one to exercise a failure path. t.Setenv restores previous
+// values automatically.
+//
+// The clearing matters as much as the setting. Without it the suite inherits the
+// developer's shell, and `PORT=8080 go test` failed for a reason that has nothing
+// to do with the code -- a test that depends on who is running it teaches people
+// to ignore it when it goes red.
+//
+// Keep this list in step with the variables Load reads:
+//
+//	grep -oE '(getenv|intEnv|os\.Getenv)\("[A-Z_]+"' internal/config/config.go
 func setValidEnv(t *testing.T) {
 	t.Helper()
+	for _, k := range []string{
+		"PORT", "HOST", "FRONTEND_URL", "COOKIE_DOMAIN", "TRUSTED_PROXIES",
+		"JWT_ACCESS_EXPIRES_IN", "JWT_REFRESH_EXPIRES_DAYS", "JWT_API_AUDIENCE",
+		"MAIL_HOST", "MAIL_PORT", "MAIL_USER", "MAIL_PASS", "MAIL_FROM",
+		"RATE_LIMIT_GLOBAL_MAX", "RATE_LIMIT_AUTHORIZE_IP_MAX", "RATE_LIMIT_AUTHORIZE_EMAIL_MAX",
+		"DB_MAX_CONNS", "DB_MIN_CONNS",
+	} {
+		t.Setenv(k, "")
+	}
 	t.Setenv("NODE_ENV", "development")
 	t.Setenv("DATABASE_URL", "postgres://localhost:5432/x")
 	t.Setenv("JWT_PRIVATE_KEY", "priv")

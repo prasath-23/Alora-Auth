@@ -22,6 +22,18 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
+// minModulusBits is the smallest RSA key this will load. jwx's own key
+// validation checks structure, not strength, so without this a 512-bit key is
+// accepted and then PUBLISHED through the JWKS endpoint — where anyone can take
+// it, factor it (hours on a laptop for 512-bit, and 1024 is no longer a serious
+// obstacle), and mint tokens for any user in any tenant. There is no detection
+// story for that: the forgeries are valid signatures.
+//
+// 2048 is the floor rather than the recommendation. The cost of refusing a weak
+// key is a failed deploy with a clear message; the cost of accepting one is
+// silent total compromise.
+const minModulusBits = 2048
+
 type keyPair struct {
 	priv *rsa.PrivateKey
 	pub  *rsa.PublicKey
@@ -44,6 +56,21 @@ func Init(privatePEM, publicPEM, kid, iss string) error {
 	pub, err := parsePublic(publicPEM)
 	if err != nil {
 		return fmt.Errorf("jwtkeys: public key: %w", err)
+	}
+	if n := priv.N.BitLen(); n < minModulusBits {
+		return fmt.Errorf("jwtkeys: private key is %d-bit, minimum is %d: a key this small can be "+
+			"factored from the public half published at /.well-known/jwks.json", n, minModulusBits)
+	}
+	if n := pub.N.BitLen(); n < minModulusBits {
+		return fmt.Errorf("jwtkeys: public key is %d-bit, minimum is %d", n, minModulusBits)
+	}
+	// Mismatched halves are a deployment mistake that otherwise surfaces as a
+	// system where every login succeeds and every authenticated request is then
+	// rejected -- signed with one key, verified against another. Catch it at
+	// startup, where the message can name the cause.
+	if !priv.PublicKey.Equal(pub) {
+		return errors.New("jwtkeys: public key is not the private key's counterpart; " +
+			"tokens would be signed with one key and verified against another")
 	}
 	mu.Lock()
 	keys[kid] = keyPair{priv: priv, pub: pub}
