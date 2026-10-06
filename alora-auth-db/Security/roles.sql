@@ -80,43 +80,100 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO alora_app;
 -- DEFINER.
 
 -- Rows are created and amended, never removed. These are the records whose
--- disappearance would itself be the incident.
+-- disappearance would itself be the incident. Sessions and their families are
+-- revoked by stamping revoked_at, never deleted: the chain is the evidence
+-- reuse detection reads. A subscription is switched off, not deleted, and an
+-- SSO connection is deactivated.
 GRANT INSERT, UPDATE ON
     tbl_clients,
     tbl_products,
     tbl_users,
+    tbl_session_families,
     tbl_user_sessions,
-    tbl_invitations
+    tbl_invitations,
+    tbl_client_products,
+    tbl_sso_connections
 TO alora_app;
 
--- Short-lived rows that are meant to be destroyed: a code is deleted the moment
--- it is redeemed, a reset token when it is used, a group when it is removed.
+-- Rows that are meant to be destroyed: a code once expired, a reset token once
+-- used, a group or login policy when it is removed.
 GRANT INSERT, UPDATE, DELETE ON
     tbl_authorization_codes,
     tbl_password_reset_tokens,
-    tbl_groups
+    tbl_groups,
+    tbl_login_policies
 TO alora_app;
 
--- Membership and grant rows. Revoking is a delete; nothing edits them in place,
--- so UPDATE is withheld -- it would let a permission be rewritten without the
--- revoke-then-grant that the audit trail records.
+-- A product role is granted and re-granted in place: stp_UpsertProductPermission
+-- is an INSERT ... ON CONFLICT DO UPDATE, and PostgreSQL requires UPDATE on the
+-- table for that statement even when no conflict occurs.
+GRANT INSERT, UPDATE, DELETE ON
+    tbl_product_permissions
+TO alora_app;
+
+-- Shared rate-limit counters: stp_RateLimitHit is an INSERT ... ON CONFLICT DO
+-- UPDATE (so UPDATE is required even when no conflict occurs), and the cleanup
+-- sweep deletes a counter once its window has passed.
+GRANT INSERT, UPDATE, DELETE ON
+    tbl_rate_limit_counters
+TO alora_app;
+
+-- Membership, grant and registration rows, and sign-in states. Each is replaced
+-- by delete-then-insert (or consumed by a delete) and never edited in place, so
+-- UPDATE is withheld. An external identity is deleted to unlink it.
 GRANT INSERT, DELETE ON
-    tbl_product_permissions,
-    tbl_group_features,
-    tbl_user_groups
-TO alora_app;
-
--- Write-once. A linked Google identity and an invitation's product list are
--- established at creation and never edited afterwards.
-GRANT INSERT ON
+    tbl_group_scopes,
+    tbl_user_scopes,
+    tbl_user_groups,
+    tbl_group_managers,
+    tbl_group_product_grants,
+    tbl_product_redirect_uris,
+    tbl_product_roles,
+    tbl_sso_connection_domains,
     tbl_linked_identities,
-    tbl_invitation_products
+    tbl_login_states
 TO alora_app;
 
--- tbl_client_products is deliberately absent: no routine writes it. Subscribing
--- a tenant to a product is provisioning, not part of the API surface, so
--- cmd/bootstrap performs it and must connect as the OWNER rather than as this
--- role. Pointing bootstrap at alora_app fails here, on purpose.
+-- Write-once: the groups an invitation offers are fixed when it is issued.
+GRANT INSERT ON
+    tbl_invitation_groups
+TO alora_app;
+
+-- API clients: created and deleted by their tenant's people or an Owner, and
+-- amended only in the columns a routine sets. An API client's id and tenant are
+-- fixed for life, so no bug can move one into another tenant.
+GRANT INSERT, DELETE ON
+    tbl_api_clients
+TO alora_app;
+GRANT UPDATE (name, description, is_active, last_used_at, updated_at) ON
+    tbl_api_clients
+TO alora_app;
+
+-- Where an API client may be used and what it may get a token for: replaced by
+-- delete-then-insert, never edited in place.
+GRANT INSERT, DELETE ON
+    tbl_api_client_scopes,
+    tbl_api_client_products
+TO alora_app;
+
+-- A secret is made, revoked and stamped when used -- never rewritten, and never
+-- deleted by the application (only with its API client, by cascade): its hash is
+-- fixed at insert, so the application cannot swap a known secret in.
+GRANT INSERT ON
+    tbl_api_client_secrets
+TO alora_app;
+GRANT UPDATE (revoked_at, last_used_at) ON
+    tbl_api_client_secrets
+TO alora_app;
+
+-- tbl_scopes is READ-ONLY here too: the catalogue is reference data the build
+-- writes. An application that could add a scope could invent a permission.
+--
+-- tbl_platform_owners is deliberately READ-ONLY here (SELECT comes from the
+-- baseline grant above). Who is an Owner is decided by provisioning, connected
+-- as the schema owner, so no bug or stolen credential of the application can
+-- promote anyone. stp_CreatePlatformOwner runs with the caller's rights and so
+-- fails under this role, on purpose.
 
 -- ── The audit trail: INSERT ONLY ────────────────────────────────────────────
 -- This is the point of the whole file. An append-only trail the application can
@@ -167,6 +224,93 @@ BEGIN
     ) THEN
         RAISE EXCEPTION
             'alora_app holds DELETE on tbl_users: deleting a user would erase them from the audit trail';
+    END IF;
+
+    -- Nobody promotes themselves: the application can read the Owners, never
+    -- write them.
+    SELECT string_agg(privilege_type, ', ')
+    INTO   v_bad
+    FROM   information_schema.table_privileges
+    WHERE  grantee    = 'alora_app'
+      AND  table_name = 'tbl_platform_owners'
+      AND  privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE');
+
+    IF v_bad IS NOT NULL THEN
+        RAISE EXCEPTION 'alora_app holds % on tbl_platform_owners: it could promote an Owner', v_bad;
+    END IF;
+
+    -- Nobody invents a permission: the scope catalogue is written by the build.
+    SELECT string_agg(privilege_type, ', ')
+    INTO   v_bad
+    FROM   information_schema.table_privileges
+    WHERE  grantee    = 'alora_app'
+      AND  table_name = 'tbl_scopes'
+      AND  privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE');
+
+    IF v_bad IS NOT NULL THEN
+        RAISE EXCEPTION 'alora_app holds % on tbl_scopes: it could invent a scope', v_bad;
+    END IF;
+
+    -- A secret's hash is fixed at insert: an application that could rewrite one
+    -- could swap a secret it knows in for any API client.
+    SELECT string_agg(column_name, ', ')
+    INTO   v_bad
+    FROM   information_schema.columns
+    WHERE  table_name = 'tbl_api_client_secrets'
+      AND  column_name NOT IN ('revoked_at', 'last_used_at')
+      AND  has_column_privilege('alora_app', 'tbl_api_client_secrets', column_name, 'UPDATE');
+
+    IF v_bad IS NOT NULL THEN
+        RAISE EXCEPTION 'alora_app may UPDATE % on tbl_api_client_secrets: it could swap a secret in', v_bad;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_privileges
+        WHERE  grantee = 'alora_app' AND table_name = 'tbl_api_client_secrets'
+          AND  privilege_type IN ('DELETE', 'TRUNCATE')
+    ) THEN
+        RAISE EXCEPTION 'alora_app may delete API client secrets: revocation must stamp, never delete';
+    END IF;
+
+    -- An API client's tenant is fixed for life.
+    IF has_column_privilege('alora_app', 'tbl_api_clients', 'client_id', 'UPDATE')
+       OR has_column_privilege('alora_app', 'tbl_api_clients', 'id', 'UPDATE') THEN
+        RAISE EXCEPTION 'alora_app may UPDATE the id or tenant of tbl_api_clients';
+    END IF;
+
+    -- An appointment is made and ended, never edited: an UPDATE could move it to
+    -- another person or group without anyone appointing them.
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_privileges
+        WHERE  grantee = 'alora_app' AND table_name = 'tbl_group_managers'
+          AND  privilege_type IN ('UPDATE', 'TRUNCATE')
+    ) OR EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE  table_name = 'tbl_group_managers'
+          AND  has_column_privilege('alora_app', 'tbl_group_managers', column_name, 'UPDATE')
+    ) THEN
+        RAISE EXCEPTION 'alora_app may UPDATE tbl_group_managers: an appointment could be moved to someone else';
+    END IF;
+
+    -- A deleted generation would erase the evidence reuse detection reads.
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_privileges
+        WHERE  grantee = 'alora_app'
+          AND  table_name IN ('tbl_user_sessions', 'tbl_session_families')
+          AND  privilege_type = 'DELETE'
+    ) THEN
+        RAISE EXCEPTION 'alora_app holds DELETE on the session tables: revocation must stamp, never delete';
+    END IF;
+
+    -- The upsert behind every product-role grant needs UPDATE; without it each
+    -- grant fails with "permission denied" under this role.
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_privileges
+        WHERE  grantee = 'alora_app' AND table_name = 'tbl_product_permissions'
+          AND  privilege_type = 'UPDATE'
+    ) THEN
+        RAISE EXCEPTION
+            'alora_app lacks UPDATE on tbl_product_permissions: stp_UpsertProductPermission would fail';
     END IF;
 
     IF NOT EXISTS (

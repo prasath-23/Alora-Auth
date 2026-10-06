@@ -1,6 +1,5 @@
 /****** Object: Table-valued Function [udf_GetProductById] ******/
--- A product, optionally restricted to active ones. The login path passes
--- TRUE, so a retired product cannot be signed into.
+-- A product, optionally restricted to active ones.
 --
 -- CREATE OR REPLACE so the build is idempotent.
 

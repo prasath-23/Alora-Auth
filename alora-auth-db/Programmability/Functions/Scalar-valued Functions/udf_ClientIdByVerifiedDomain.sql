@@ -1,8 +1,8 @@
 /****** Object: Scalar-valued Function [udf_ClientIdByVerifiedDomain] ******/
 -- Resolves a hostname to its tenant, but ONLY for a verified domain on an
--- active tenant. This backs the CORS decision and the federated-login tenant
--- lookup, so requiring verification is what stops someone claiming an
--- unowned domain and being admitted to another organisation.
+-- active tenant. This backs federated-login tenant resolution, so requiring
+-- verification is what stops someone claiming an unowned domain and being
+-- admitted to another organisation.
 --
 -- CREATE OR REPLACE so the build is idempotent.
 

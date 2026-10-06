@@ -22,6 +22,17 @@ TVF = os.path.join(HERE, "Programmability", "Functions", "Table-valued Functions
 
 # (name, params, returns, volatility, purpose, body)
 SCALARS = [
+    ("udf_RateLimitPeek", "p_key TEXT, p_max INTEGER", "TIMESTAMPTZ", "STABLE",
+     "The reset time of a shared fixed-window counter that has ALREADY reached "
+     "p_max, or NULL when the key is still within budget or its window has passed. "
+     "Read-only -- it spends nothing: the failure-budget check consults it before "
+     "running a request and spends a unit only when the request then fails.",
+     """SELECT c.reset_at
+    FROM   tbl_rate_limit_counters c
+    WHERE  c.bucket_key = p_key
+      AND  c.reset_at   > now()
+      AND  c.hits      >= p_max"""),
+
     ("udf_ActiveEmailExists", "p_clientId TEXT, p_email TEXT", "BOOLEAN", "STABLE",
      "TRUE when a live user already holds this address in the tenant. Used as a "
      "pre-insert check so the caller can return a clean 409 instead of surfacing a "
@@ -35,9 +46,9 @@ SCALARS = [
 
     ("udf_ClientIdByVerifiedDomain", "p_domain TEXT", "TEXT", "STABLE",
      "Resolves a hostname to its tenant, but ONLY for a verified domain on an "
-     "active tenant. This backs the CORS decision and the federated-login tenant "
-     "lookup, so requiring verification is what stops someone claiming an "
-     "unowned domain and being admitted to another organisation.",
+     "active tenant. This backs federated-login tenant resolution, so requiring "
+     "verification is what stops someone claiming an unowned domain and being "
+     "admitted to another organisation.",
      """SELECT c.id
     FROM   tbl_clients c
     WHERE  lower(c.domain)      = lower(p_domain)
@@ -49,19 +60,30 @@ SCALARS = [
      "The product's audience key, used to scope a minted token to one product.",
      """SELECT p.key FROM tbl_products p WHERE p.id = p_productId"""),
 
+    ("udf_IsGroupManager", "p_groupId TEXT, p_clientId TEXT, p_userId TEXT", "BOOLEAN", "STABLE",
+     "TRUE when the user manages the group, in that tenant. The manager door asks it "
+     "on every request; its writes ask again inside the procedure, at the moment of "
+     "the change.",
+     """SELECT EXISTS (
+        SELECT 1 FROM tbl_group_managers gm
+        WHERE  gm.group_id  = p_groupId
+          AND  gm.client_id = p_clientId
+          AND  gm.user_id   = p_userId
+    )"""),
+
     ("udf_ClientNameById", "p_clientId TEXT", "TEXT", "STABLE",
      "The tenant's display name, for invitation emails.",
      """SELECT c.name FROM tbl_clients c WHERE c.id = p_clientId"""),
 
     ("udf_ActiveSubscriptionId", "p_clientId TEXT, p_productId TEXT", "TEXT", "STABLE",
-     "The tenant's live subscription to a product, or NULL. Both the login path and "
-     "the permission-grant path gate on this, so a tenant cannot be signed into (or "
-     "granted a role in) a product it does not pay for.",
+     "The tenant's live subscription to a product, or NULL. The grant paths gate on "
+     "this, so a tenant cannot be granted a role in a product it does not pay for.",
      """SELECT cp.id
     FROM   tbl_client_products cp
     WHERE  cp.client_id  = p_clientId
       AND  cp.product_id = p_productId
       AND  cp.is_active   = true
+      AND  cp.starts_at  <= now()
       AND  (cp.ends_at   IS NULL OR cp.ends_at > now())
     LIMIT  1"""),
 
@@ -75,21 +97,6 @@ SCALARS = [
       AND  lower(u.email) = lower(p_email)
       AND  u.deleted_at  IS NULL"""),
 
-    ("udf_HasGroupFeature", "p_featureKey TEXT, p_clientId TEXT, p_userId TEXT", "BOOLEAN", "STABLE",
-     "TRUE when the user belongs to a group IN THIS TENANT that grants the feature. "
-     "The group's OWN client_id is checked, not just the membership row: matching "
-     "only the membership would let a group belonging to another organisation "
-     "confer permission here.",
-     """SELECT EXISTS (
-        SELECT 1
-        FROM   tbl_group_features gf
-        JOIN   tbl_groups        g  ON g.id  = gf.group_id
-        JOIN   tbl_user_groups   ug ON ug.group_id = g.id
-        WHERE  gf.feature_key = p_featureKey
-          AND  g.client_id    = p_clientId
-          AND  ug.user_id     = p_userId
-    )"""),
-
     ("udf_UserCursorPosition", "p_userId TEXT, p_clientId TEXT", "TIMESTAMPTZ", "STABLE",
      "Translates an opaque page cursor (a user id) into its keyset position. "
      "Tenant-scoped, so a cursor forged from another tenant's id resolves to NULL "
@@ -100,11 +107,43 @@ SCALARS = [
       AND  u.client_id = p_clientId
       AND  u.deleted_at IS NULL"""),
 
+    ("udf_IsApiClientSecretLive", "p_secretId TEXT, p_apiClientId TEXT", "BOOLEAN", "STABLE",
+     "TRUE while the secret an application token was issued under is live: not "
+     "revoked, not expired. Introspection checks it, so revoking a secret ends the "
+     "tokens issued under it at once.",
+     """SELECT EXISTS (
+        SELECT 1 FROM tbl_api_client_secrets x
+        WHERE  x.id            = p_secretId
+          AND  x.api_client_id = p_apiClientId
+          AND  x.revoked_at   IS NULL
+          AND  (x.expires_at IS NULL OR x.expires_at > now())
+    )"""),
+
     ("udf_HealthCheck", "", "INTEGER", "STABLE",
      "Readiness probe. Round-trips a constant so the caller only has to check for "
      "an error; it touches no table, so a slow query cannot make the service look "
      "unhealthy.",
      """SELECT 1"""),
+
+    ("udf_GetSystemGroupId", "p_clientId TEXT, p_systemKey TEXT", "TEXT", "STABLE",
+     "The id of one of a tenant's system groups (ADMINS), created with the tenant.",
+     """SELECT g.id
+    FROM   tbl_groups g
+    WHERE  g.client_id  = p_clientId
+      AND  g.system_key = p_systemKey"""),
+
+    ("udf_IsRedirectUriRegistered", "p_productId TEXT, p_redirectUri TEXT", "BOOLEAN", "STABLE",
+     "TRUE only for an EXACT match against an active product's registered redirect "
+     "URIs. No prefix, origin or wildcard matching: any of those is an open "
+     "redirect waiting to happen.",
+     """SELECT EXISTS (
+        SELECT 1
+        FROM   tbl_product_redirect_uris r
+        JOIN   tbl_products p ON p.id = r.product_id
+                             AND p.is_active = true
+        WHERE  r.product_id   = p_productId
+          AND  r.redirect_uri = p_redirectUri
+    )"""),
 ]
 
 # (name, params, returns, volatility, purpose, body)
@@ -112,26 +151,32 @@ TVFS = [
     # ---- users -------------------------------------------------------------
     ("udf_GetUserById", "p_userId TEXT", "SETOF tbl_users", "STABLE",
      "Full row by primary key. NOT tenant-scoped and NOT soft-delete filtered "
-     "because the id comes from a verified JWT subject, making this a trusted "
+     "because the id comes from a verified token subject, making this a trusted "
      "self-load. It is the only read that exposes password_hash outside the login "
      "path, and it exists for the self-service change-password flow.",
      "SELECT * FROM tbl_users u WHERE u.id = p_userId"),
 
-    ("udf_GetUserFreshness", "p_userId TEXT", "SETOF vw_UserFreshness", "STABLE",
-     "One row per request for the staleness check. Unfiltered by design so the "
-     "caller can distinguish inactive from deleted from missing.",
-     "SELECT * FROM vw_UserFreshness v WHERE v.id = p_userId"),
+    ("udf_ListLoginCandidates", "p_email TEXT", "SETOF vw_UserCredential", "STABLE",
+     "Every live password account that holds this address, across tenants: one "
+     "person may belong to several organisations. Capped and deterministically "
+     "ordered, so the work a login does is bounded and repeatable.",
+     """SELECT * FROM vw_UserCredential v
+    WHERE  lower(v.email) = lower(p_email)
+    ORDER  BY v.created_at, v.id
+    LIMIT  10"""),
 
-    ("udf_GetUserCredentialByEmail", "p_email TEXT", "SETOF vw_UserCredential", "STABLE",
-     "The login lookup. Cross-tenant on purpose: an address identifies at most one "
-     "live password account, so the tenant is derived FROM the user rather than "
-     "supplied by the caller.",
-     "SELECT * FROM vw_UserCredential v WHERE lower(v.email) = lower(p_email) LIMIT 1"),
+    ("udf_ListUserIdentitiesByEmail", "p_email TEXT", "SETOF vw_UserIdentity", "STABLE",
+     "Every live account that holds this address, across tenants, whether or not it "
+     "has a password: the accounts a first federated sign-in with a verified address "
+     "may link to. Capped and deterministically ordered like the password lookup.",
+     """SELECT * FROM vw_UserIdentity v
+    WHERE  lower(v.email) = lower(p_email)
+    ORDER  BY v.client_id, v.id
+    LIMIT  10"""),
 
     ("udf_GetUserIdentityForToken", "p_userId TEXT", "SETOF vw_UserIdentity", "STABLE",
-     "The token-minting identity. Returns zero rows for a deprovisioned account, "
-     "which the caller maps to 403 — this is what stops a token being issued to a "
-     "user disabled during the authorization-code window.",
+     "The token-minting identity. Returns zero rows for a deprovisioned account or a "
+     "suspended tenant, which the caller maps to a refusal.",
      "SELECT * FROM vw_UserIdentity v WHERE v.id = p_userId"),
 
     ("udf_GetUserTenantScoped", "p_userId TEXT, p_clientId TEXT", "SETOF vw_UserTenantScoped", "STABLE",
@@ -150,6 +195,15 @@ TVFS = [
       AND  v.account_type   = 'OAUTH_ONLY'
     LIMIT  1"""),
 
+    ("udf_GetUserForSsoLink", "p_clientId TEXT, p_email TEXT", "SETOF vw_UserTenantScoped", "STABLE",
+     "The account a first SSO sign-in may link to: a live, active member of the "
+     "connection's OWN tenant with this address. SSO never creates accounts.",
+     """SELECT * FROM vw_UserTenantScoped v
+    WHERE  v.client_id     = p_clientId
+      AND  lower(v.email)  = lower(p_email)
+      AND  v.is_active      = true
+    LIMIT  1"""),
+
     ("udf_ListUsers",
      "p_clientId TEXT, p_search TEXT DEFAULT NULL, p_cursorCreated TIMESTAMPTZ DEFAULT NULL, "
      "p_cursorId TEXT DEFAULT NULL, p_take INTEGER DEFAULT 26",
@@ -157,12 +211,14 @@ TVFS = [
      "Keyset-paginated user list. Keyset rather than OFFSET because OFFSET degrades "
      "linearly and can skip or repeat rows when the set changes between pages. The "
      "search term has backslash, percent and underscore escaped, so a caller cannot "
-     "inject LIKE wildcards to widen the match.",
+     "inject LIKE wildcards to widen the match. The escapes are E'' strings on "
+     "purpose: with standard_conforming_strings on, a plain '\\\\' is TWO characters, "
+     "which ESCAPE rejects (\"invalid escape string\") on every search.",
      """SELECT * FROM vw_UserListItem v
     WHERE  v.client_id = p_clientId
       AND  (p_search IS NULL
-            OR v.email ILIKE '%' || replace(replace(replace(p_search, '\\\\', '\\\\\\\\'),
-                                                    '%', '\\\\%'), '_', '\\\\_') || '%' ESCAPE '\\\\')
+            OR v.email ILIKE '%' || replace(replace(replace(p_search, E'\\\\', E'\\\\\\\\'),
+                                                    '%', E'\\\\%'), '_', E'\\\\_') || '%' ESCAPE E'\\\\')
       AND  (p_cursorCreated IS NULL
             OR (v.created_at, v.id) < (p_cursorCreated, p_cursorId))
     ORDER  BY v.created_at DESC, v.id DESC
@@ -177,27 +233,62 @@ TVFS = [
     ORDER  BY v.group_name"""),
 
     ("udf_ListUserProductRoles", "p_userId TEXT, p_clientId TEXT", "SETOF vw_UserProductRole", "STABLE",
-     "The user's active product roles. These become the JWT roles claim, so the "
-     "tenant predicate here is what keeps another organisation's grant out of a "
-     "token.",
+     "The user's DIRECT product roles, tenant-scoped.",
      """SELECT * FROM vw_UserProductRole v
     WHERE  v.user_id   = p_userId
       AND  v.client_id = p_clientId"""),
 
-    ("udf_ListUserFeatures", "p_clientId TEXT, p_userId TEXT", "SETOF TEXT", "STABLE",
-     "Distinct feature keys the user holds through group membership, for the UI to "
-     "decide what to render.",
-     """SELECT DISTINCT gf.feature_key
-    FROM   tbl_group_features gf
-    JOIN   tbl_groups      g  ON g.id = gf.group_id
-    JOIN   tbl_user_groups ug ON ug.group_id = g.id AND ug.client_id = g.client_id
-    WHERE  g.client_id = p_clientId
-      AND  ug.user_id  = p_userId
-    ORDER  BY gf.feature_key"""),
+    ("udf_ListUserScopes", "p_clientId TEXT, p_userId TEXT", "SETOF vw_EffectiveScope", "STABLE",
+     "Every App Central scope the user holds, one row per source (each group, and "
+     "their extras), tenant-scoped. What the rules compare, and what the UI shows "
+     "under 'where it comes from'.",
+     """SELECT * FROM vw_EffectiveScope v
+    WHERE  v.client_id = p_clientId
+      AND  v.user_id   = p_userId
+    ORDER  BY v.scope, v.source, v.group_name"""),
 
-    ("udf_GetUserDetail", "p_userId TEXT, p_clientId TEXT", "SETOF vw_GroupDetailRow", "STABLE",
-     "PLACEHOLDER — replaced below; see udf_GetUserPermissionRows.",
-     "SELECT * FROM vw_GroupDetailRow v WHERE false"),
+    ("udf_ListScopeReach", "p_clientId TEXT, p_userId TEXT", "SETOF vw_ScopeReach", "STABLE",
+     "The user's reach, tenant-scoped: the scopes they hold plus those of the groups "
+     "they manage, one row per source. What rule 2 compares -- never what grants.",
+     """SELECT * FROM vw_ScopeReach v
+    WHERE  v.client_id = p_clientId
+      AND  v.user_id   = p_userId
+    ORDER  BY v.scope, v.via"""),
+
+    ("udf_ListScopes", "", "SETOF tbl_scopes", "STABLE",
+     "The scope catalogue, in display order.",
+     "SELECT * FROM tbl_scopes s ORDER BY s.sort_order"),
+
+    ("udf_GetUserLoginPolicy", "p_userId TEXT, p_clientId TEXT", "SETOF vw_UserLoginPolicy", "STABLE",
+     "The login policy that applies to one user, already resolved.",
+     """SELECT * FROM vw_UserLoginPolicy v
+    WHERE  v.user_id   = p_userId
+      AND  v.client_id = p_clientId"""),
+
+    # ---- access ------------------------------------------------------------
+    ("udf_ListEffectiveRoles", "p_userId TEXT, p_clientId TEXT, p_productId TEXT", "SETOF TEXT", "STABLE",
+     "The distinct roles a user effectively holds in ONE product. Empty means no "
+     "access; this is what a product token's roles claim is built from.",
+     """SELECT DISTINCT v.role_name
+    FROM   vw_EffectiveProductRole v
+    WHERE  v.user_id    = p_userId
+      AND  v.client_id  = p_clientId
+      AND  v.product_id = p_productId
+    ORDER  BY v.role_name"""),
+
+    ("udf_ListUserEffectiveAccess", "p_userId TEXT, p_clientId TEXT", "SETOF vw_EffectiveProductRole", "STABLE",
+     "Every effective role of one user, with where it comes from.",
+     """SELECT * FROM vw_EffectiveProductRole v
+    WHERE  v.user_id   = p_userId
+      AND  v.client_id = p_clientId
+    ORDER  BY v.product_name, v.role_name"""),
+
+    ("udf_ListUserApps", "p_userId TEXT, p_clientId TEXT", "SETOF vw_UserApp", "STABLE",
+     "The products a user may open from App Central.",
+     """SELECT * FROM vw_UserApp v
+    WHERE  v.user_id   = p_userId
+      AND  v.client_id = p_clientId
+    ORDER  BY v.product_name"""),
 
     # ---- sessions ----------------------------------------------------------
     ("udf_GetSessionByRefreshHashForUpdate", "p_tokenHash TEXT", "SETOF tbl_user_sessions", "VOLATILE",
@@ -234,14 +325,14 @@ TVFS = [
      "concurrent revoke is harmless.",
      "SELECT * FROM vw_SessionOwner v WHERE v.refresh_token_hash = p_tokenHash"),
 
-    ("udf_GetClientSessionById", "p_sessionId TEXT, p_clientId TEXT", "SETOF vw_SessionOwner", "STABLE",
-     "Tenant-scoped session lookup for the admin revoke path.",
-     "SELECT * FROM vw_SessionOwner v WHERE v.id = p_sessionId AND v.client_id = p_clientId"),
+    ("udf_GetSessionFamilyGate", "p_familyId TEXT", "SETOF vw_SessionFamilyGate", "STABLE",
+     "Everything the service must check about one login, in one read.",
+     "SELECT * FROM vw_SessionFamilyGate v WHERE v.family_id = p_familyId"),
 
-    ("udf_ListActiveSessions", "p_clientId TEXT", "SETOF vw_SessionSummary", "STABLE",
+    ("udf_ListSessionFamilies", "p_clientId TEXT", "SETOF vw_SessionFamilySummary", "STABLE",
      "The admin session list, capped so one tenant cannot request an unbounded "
      "result set. The view already excludes token material.",
-     """SELECT * FROM vw_SessionSummary v
+     """SELECT * FROM vw_SessionFamilySummary v
     WHERE  v.client_id = p_clientId
     ORDER  BY v.last_seen_at DESC
     LIMIT  200"""),
@@ -252,14 +343,12 @@ TVFS = [
      "to return.",
      "SELECT * FROM tbl_clients c WHERE c.id = p_clientId"),
 
-    ("udf_GetClientOAuthGate", "p_clientId TEXT", "SETOF vw_ClientOAuthGate", "STABLE",
-     "The tenant's identity-provider policy, checked before a federated login is "
-     "allowed to proceed.",
-     "SELECT * FROM vw_ClientOAuthGate v WHERE v.id = p_clientId"),
+    ("udf_ListCompanies", "", "SETOF vw_CompanyListItem", "STABLE",
+     "Every tenant, for the Owner console: the platform company first.",
+     "SELECT * FROM vw_CompanyListItem v ORDER BY v.is_platform DESC, v.name"),
 
     ("udf_GetProductById", "p_productId TEXT, p_activeOnly BOOLEAN DEFAULT false", "SETOF tbl_products", "STABLE",
-     "A product, optionally restricted to active ones. The login path passes TRUE, "
-     "so a retired product cannot be signed into.",
+     "A product, optionally restricted to active ones.",
      """SELECT * FROM tbl_products p
     WHERE  p.id = p_productId
       AND  (p_activeOnly = false OR p.is_active = true)"""),
@@ -274,11 +363,75 @@ TVFS = [
      "SELECT * FROM vw_ClientProductDetail v WHERE v.client_id = p_clientId ORDER BY v.product_name"),
 
     ("udf_GetProductPermission", "p_userId TEXT, p_clientId TEXT, p_productId TEXT", "SETOF vw_UserProductRole", "STABLE",
-     "A single grant, for existence checks.",
+     "A single direct grant, for existence checks.",
      """SELECT * FROM vw_UserProductRole v
     WHERE  v.user_id    = p_userId
       AND  v.client_id  = p_clientId
       AND  v.product_id = p_productId"""),
+
+    ("udf_GetProductClient", "p_productId TEXT", "SETOF vw_ProductClient", "STABLE",
+     "A product's client registration, without its secret.",
+     "SELECT * FROM vw_ProductClient v WHERE v.id = p_productId"),
+
+    ("udf_GetProductClientCredential", "p_productId TEXT", "SETOF vw_ProductClientCredential", "STABLE",
+     "The secret hash of a product, for client authentication only.",
+     "SELECT * FROM vw_ProductClientCredential v WHERE v.id = p_productId"),
+
+    ("udf_ListProducts", "", "SETOF vw_ProductClient", "STABLE",
+     "The whole catalogue with registration details, for the Owner console.",
+     "SELECT * FROM vw_ProductClient v ORDER BY v.name"),
+
+    ("udf_ListProductRoles", "p_productId TEXT", "SETOF tbl_product_roles", "STABLE",
+     "A product's role catalogue.",
+     "SELECT * FROM tbl_product_roles r WHERE r.product_id = p_productId ORDER BY r.role_name"),
+
+    ("udf_ListProductRedirectUris", "p_productId TEXT", "SETOF tbl_product_redirect_uris", "STABLE",
+     "A product's registered redirect URIs.",
+     "SELECT * FROM tbl_product_redirect_uris r WHERE r.product_id = p_productId ORDER BY r.redirect_uri"),
+
+    # ---- API clients -------------------------------------------------------
+    ("udf_ListApiClients", "p_clientId TEXT", "SETOF vw_ApiClientSummary", "STABLE",
+     "A tenant's API clients, by name.",
+     "SELECT * FROM vw_ApiClientSummary v WHERE v.client_id = p_clientId ORDER BY lower(v.name)"),
+
+    ("udf_ListAllApiClients", "", "SETOF vw_ApiClientSummary", "STABLE",
+     "Every tenant's API clients, for the Owner console: by company, then by name.",
+     "SELECT * FROM vw_ApiClientSummary v ORDER BY lower(v.company_name), lower(v.name)"),
+
+    ("udf_GetApiClient", "p_apiClientId TEXT, p_clientId TEXT", "SETOF vw_ApiClientSummary", "STABLE",
+     "One API client of a tenant; another tenant's id yields no rows.",
+     "SELECT * FROM vw_ApiClientSummary v WHERE v.id = p_apiClientId AND v.client_id = p_clientId"),
+
+    ("udf_ListApiClientSecrets", "p_apiClientId TEXT, p_clientId TEXT", "SETOF vw_ApiClientSecret", "STABLE",
+     "An API client's secrets, newest first, without their hashes.",
+     """SELECT * FROM vw_ApiClientSecret v
+    WHERE  v.api_client_id = p_apiClientId
+      AND  v.client_id     = p_clientId
+    ORDER  BY v.created_at DESC"""),
+
+    ("udf_ListApiClientProductChoices", "p_clientId TEXT", "SETOF vw_ClientProductDetail", "STABLE",
+     "The products a tenant may put on an API client's list: live subscriptions to "
+     "active products that accept API clients.",
+     """SELECT * FROM vw_ClientProductDetail v
+    WHERE  v.client_id = p_clientId
+      AND  v.is_active
+      AND  v.starts_at <= now()
+      AND  (v.ends_at IS NULL OR v.ends_at > now())
+      AND  v.product_is_active
+      AND  v.product_accepts_api_clients
+    ORDER  BY v.product_name"""),
+
+    ("udf_GetOAuthClientCredentials", "p_oauthClientId TEXT", "SETOF vw_OAuthClientCredential", "STABLE",
+     "The credentials to check a client id's secret against at the token endpoint: a "
+     "product's one secret, or an API client's live secrets (at most two).",
+     "SELECT * FROM vw_OAuthClientCredential v WHERE v.oauth_client_id = p_oauthClientId"),
+
+    ("udf_GetApiClientGrant", "p_apiClientId TEXT, p_productKey TEXT", "SETOF vw_ApiClientGrant", "STABLE",
+     "Whether an API client may have a token for a product on its list right now, and "
+     "with which scopes. No row: the product is unknown, or not on the list.",
+     """SELECT * FROM vw_ApiClientGrant v
+    WHERE  v.api_client_id = p_apiClientId
+      AND  v.product_key   = p_productKey"""),
 
     # ---- invitations -------------------------------------------------------
     ("udf_GetPendingInviteByEmail", "p_clientId TEXT, p_email TEXT", "SETOF vw_PendingInvitation", "STABLE",
@@ -301,15 +454,36 @@ TVFS = [
     ORDER  BY v.created_at DESC
     LIMIT  100"""),
 
-    ("udf_ListInvitationProducts", "p_invitationId TEXT", "SETOF vw_InvitationProductRole", "STABLE",
-     "The products an invitation confers, applied on acceptance.",
-     """SELECT * FROM vw_InvitationProductRole v
+    ("udf_ListInvitationGroups", "p_invitationId TEXT", "SETOF vw_InvitationGroup", "STABLE",
+     "The groups an invitation adds its user to, applied on acceptance.",
+     """SELECT * FROM vw_InvitationGroup v
     WHERE  v.invitation_id = p_invitationId
-    ORDER  BY v.product_name"""),
+    ORDER  BY v.group_name"""),
+
+    ("udf_GetInvitationLoginPolicy", "p_invitationId TEXT, p_clientId TEXT", "SETOF tbl_login_policies", "STABLE",
+     "The login policy an invited user will be under: the highest-priority policy "
+     "among the invited groups, else the tenant default. Lets the acceptance page "
+     "offer only the methods the user will actually be allowed.",
+     """SELECT lp.* FROM tbl_login_policies lp
+    WHERE  lp.client_id = p_clientId
+      AND  lp.id = COALESCE(
+             (SELECT gp.id
+              FROM   tbl_invitation_groups ig
+              JOIN   tbl_groups         g  ON g.id  = ig.group_id
+                                          AND g.client_id = ig.client_id
+              JOIN   tbl_login_policies gp ON gp.id = g.login_policy_id
+                                          AND gp.client_id = g.client_id
+              WHERE  ig.invitation_id = p_invitationId
+                AND  ig.client_id     = p_clientId
+              ORDER  BY gp.priority DESC
+              LIMIT  1),
+             (SELECT d.id FROM tbl_login_policies d
+              WHERE  d.client_id = p_clientId
+                AND  d.is_default))"""),
 
     # ---- rbac --------------------------------------------------------------
     ("udf_ListGroups", "p_clientId TEXT", "SETOF vw_GroupListItem", "STABLE",
-     "The tenant's groups with features and live member counts.",
+     "The tenant's groups with their scopes, product grants and live member counts.",
      "SELECT * FROM vw_GroupListItem v WHERE v.client_id = p_clientId ORDER BY v.name"),
 
     ("udf_GetGroupDetail", "p_groupId TEXT, p_clientId TEXT", "SETOF vw_GroupDetailRow", "STABLE",
@@ -323,21 +497,108 @@ TVFS = [
      "Ownership check before any group mutation.",
      "SELECT * FROM tbl_groups g WHERE g.id = p_groupId AND g.client_id = p_clientId"),
 
-    # ---- oauth / reset -----------------------------------------------------
-    ("udf_GetLinkedIdentity", "p_provider \"IdpProvider\", p_providerId TEXT", "SETOF vw_LinkedIdentityOwner", "STABLE",
-     "Resolves an external identity to its local user. Matching on the provider's "
-     "stable subject id rather than the email means a user who changes their "
-     "provider address keeps their account, and whoever later acquires that address "
-     "does not inherit it.",
-     """SELECT * FROM vw_LinkedIdentityOwner v
-    WHERE  v.provider    = p_provider
-      AND  v.provider_id = p_providerId"""),
+    ("udf_ListGroupManagers", "p_groupId TEXT, p_clientId TEXT", "SETOF vw_GroupManager", "STABLE",
+     "A group's managers, tenant-scoped, by address.",
+     """SELECT * FROM vw_GroupManager v
+    WHERE  v.group_id  = p_groupId
+      AND  v.client_id = p_clientId
+    ORDER  BY v.email"""),
 
-    ("udf_GetValidResetToken", "p_tokenHash TEXT", "SETOF vw_ValidResetToken", "STABLE",
-     "A redeemable reset token with its owner's state. The view carries the unused "
-     "and unexpired predicates; the owner's flags let the caller refuse to revive a "
-     "disabled account.",
-     "SELECT * FROM vw_ValidResetToken v WHERE v.token_hash = p_tokenHash"),
+    ("udf_ListManagedGroups", "p_userId TEXT, p_clientId TEXT", "SETOF vw_GroupListItem", "STABLE",
+     "The groups a person manages in their tenant, as the group list shows them.",
+     """SELECT * FROM vw_GroupListItem v
+    WHERE  v.client_id = p_clientId
+      AND  EXISTS (SELECT 1 FROM tbl_group_managers gm
+                   WHERE  gm.group_id  = v.id
+                     AND  gm.client_id = v.client_id
+                     AND  gm.user_id   = p_userId)
+    ORDER  BY v.name"""),
+
+    # ---- oauth / federation / reset ----------------------------------------
+    ("udf_GetAuthorizationCodeByHash", "p_codeHash TEXT", "SETOF tbl_authorization_codes", "STABLE",
+     "A code by its hash, spent or not: after a failed claim, it tells a replay "
+     "(whose product login must then be revoked) from an unknown code.",
+     "SELECT * FROM tbl_authorization_codes a WHERE a.code_hash = p_codeHash"),
+
+    ("udf_GetLoginState", "p_stateHash TEXT, p_kind \"LoginStateKind\"", "SETOF tbl_login_states", "STABLE",
+     "A live sign-in state by its hash, WITHOUT consuming it: the account chooser "
+     "reads its candidates before the choice is made. Redemption is always "
+     "stp_TakeLoginState, which deletes the row in the same statement.",
+     """SELECT * FROM tbl_login_states s
+    WHERE  s.state_hash = p_stateHash
+      AND  s.kind       = p_kind
+      AND  s.expires_at > now()"""),
+
+    ("udf_ListGoogleLinks", "p_subject TEXT", "SETOF vw_LinkedIdentityOwner", "STABLE",
+     "Every live account a Google subject is linked to, one per tenant at most.",
+     """SELECT * FROM vw_LinkedIdentityOwner v
+    WHERE  v.provider    = 'GOOGLE'
+      AND  v.provider_id = p_subject"""),
+
+    ("udf_GetLinkedIdentityByConnection", "p_connectionId TEXT, p_subject TEXT", "SETOF vw_LinkedIdentityOwner", "STABLE",
+     "The live account an SSO subject is linked to at one connection. Matching on "
+     "the provider's stable subject, never the email, is what stops an address "
+     "change at the provider from moving someone into another account.",
+     """SELECT * FROM vw_LinkedIdentityOwner v
+    WHERE  v.provider      = 'OIDC'
+      AND  v.connection_id = p_connectionId
+      AND  v.provider_id   = p_subject"""),
+
+    # The lock below is what makes a reset token single-use; see the header. The
+    # header is verbatim "--" lines, which wrap() passes through unchanged.
+    ("udf_GetValidResetToken", "p_tokenHash TEXT", "SETOF vw_ValidResetToken", "VOLATILE",
+     "-- A redeemable password-reset token with its owner's state. The unused and\n"
+     "-- unexpired predicates come from vw_ValidResetToken; the owner's flags let the\n"
+     "-- caller refuse to revive a disabled account.\n"
+     "--\n"
+     "-- FOR UPDATE OF t is ESSENTIAL and is why this function reads the base tables\n"
+     "-- rather than simply selecting from the view: it locks the token row for the\n"
+     "-- caller's transaction, so two concurrent redemptions of the same (possibly\n"
+     "-- stolen) token serialise. The second waits, re-evaluates `used_at IS NULL`\n"
+     "-- under the lock, and finds nothing — which is what makes single-use real. A\n"
+     "-- lock-free read would let an attacker racing the legitimate user set the\n"
+     "-- password to a value of their choosing.\n"
+     "--\n"
+     "-- VOLATILE because a STABLE function may not take row locks.\n"
+     "--\n"
+     "-- The result type stays SETOF vw_ValidResetToken so the row shape is declared in\n"
+     "-- exactly one place.",
+     """SELECT t.id,
+           t.user_id,
+           t.client_id,
+           t.token_hash,
+           u.email,
+           u.is_active,
+           u.deleted_at
+    FROM   tbl_password_reset_tokens t
+    JOIN   tbl_users u ON u.id = t.user_id
+    WHERE  t.token_hash  = p_tokenHash
+      AND  t.used_at    IS NULL
+      AND  t.expires_at  > now()
+    FOR    UPDATE OF t"""),
+
+    # ---- login policies / sso ----------------------------------------------
+    ("udf_ListLoginPolicies", "p_clientId TEXT", "SETOF tbl_login_policies", "STABLE",
+     "A tenant's login policies, highest priority first.",
+     "SELECT * FROM tbl_login_policies lp WHERE lp.client_id = p_clientId ORDER BY lp.priority DESC"),
+
+    ("udf_GetLoginPolicy", "p_policyId TEXT, p_clientId TEXT", "SETOF tbl_login_policies", "STABLE",
+     "One policy, tenant-scoped.",
+     "SELECT * FROM tbl_login_policies lp WHERE lp.id = p_policyId AND lp.client_id = p_clientId"),
+
+    ("udf_GetSsoConnection", "p_connectionId TEXT", "SETOF vw_SsoConnectionRuntime", "STABLE",
+     "What the SSO login path needs about one connection, secret ciphertext "
+     "included. Never returned by any API.",
+     "SELECT * FROM vw_SsoConnectionRuntime v WHERE v.id = p_connectionId"),
+
+    ("udf_ListSsoConnections", "p_clientId TEXT", "SETOF vw_SsoConnectionSummary", "STABLE",
+     "A tenant's SSO connections, without secrets.",
+     "SELECT * FROM vw_SsoConnectionSummary v WHERE v.client_id = p_clientId ORDER BY v.name"),
+
+    ("udf_GetDomainLoginHint", "p_domain TEXT", "SETOF vw_DomainLoginHint", "STABLE",
+     "The sign-in methods to OFFER for an email domain. A hint for the login page "
+     "only: every login path enforces the user's own policy regardless.",
+     "SELECT * FROM vw_DomainLoginHint v WHERE v.domain = lower(p_domain) LIMIT 1"),
 ]
 
 
@@ -386,8 +647,6 @@ for spec in SCALARS:
 
 for spec in TVFS:
     name = spec[0]
-    if name == "udf_GetUserDetail":
-        continue  # superseded: user detail is assembled from two focused reads
     with open(os.path.join(TVF, name + ".sql"), "w", encoding="utf-8", newline="\n") as f:
         f.write(emit("Table-valued Function", *spec))
     n += 1

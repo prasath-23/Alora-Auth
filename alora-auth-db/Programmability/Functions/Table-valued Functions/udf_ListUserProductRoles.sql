@@ -1,7 +1,5 @@
 /****** Object: Table-valued Function [udf_ListUserProductRoles] ******/
--- The user's active product roles. These become the JWT roles claim, so the
--- tenant predicate here is what keeps another organisation's grant out of a
--- token.
+-- The user's DIRECT product roles, tenant-scoped.
 --
 -- CREATE OR REPLACE so the build is idempotent.
 

@@ -46,6 +46,16 @@ DO $$ BEGIN
             ON DELETE CASCADE;
     END IF;
 END $$;
+--
+-- TENANT ISOLATION, the other side: the membership's tenant is the group's
+-- own.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_user_groups_tbl_groups_group_id_client_id') THEN
+        ALTER TABLE tbl_user_groups ADD CONSTRAINT FK_tbl_user_groups_tbl_groups_group_id_client_id
+            FOREIGN KEY (group_id, client_id) REFERENCES tbl_groups (id, client_id)
+            ON DELETE CASCADE;
+    END IF;
+END $$;
 
 -- Unique constraints and indexes.
 CREATE INDEX IF NOT EXISTS IX_tbl_user_groups_user_client

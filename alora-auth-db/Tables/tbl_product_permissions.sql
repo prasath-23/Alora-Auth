@@ -1,6 +1,6 @@
 /****** Object: Table [tbl_product_permissions] ******/
--- A user's role within one product. These rows become the JWT roles claim,
--- so their tenant scoping is security-critical.
+-- A user's DIRECT role within one product, granted by an Owner. Effective
+-- access adds the roles the user's groups grant.
 --
 -- Idempotent: guarded so re-running the build is safe.
 
@@ -48,6 +48,25 @@ DO $$ BEGIN
         ALTER TABLE tbl_product_permissions ADD CONSTRAINT FK_tbl_product_permissions_tbl_users_user_id_client_id
             FOREIGN KEY (user_id, client_id) REFERENCES tbl_users (id, client_id)
             ON DELETE CASCADE;
+    END IF;
+END $$;
+--
+-- A role can only be granted in a product the tenant subscribes to.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_product_permissions_subscription') THEN
+        ALTER TABLE tbl_product_permissions ADD CONSTRAINT FK_tbl_product_permissions_subscription
+            FOREIGN KEY (client_id, product_id) REFERENCES tbl_client_products (client_id, product_id)
+            ON DELETE RESTRICT;
+    END IF;
+END $$;
+--
+-- The role must be in the product's catalogue; a role still granted cannot
+-- be removed from it.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_product_permissions_role') THEN
+        ALTER TABLE tbl_product_permissions ADD CONSTRAINT FK_tbl_product_permissions_role
+            FOREIGN KEY (product_id, role_name) REFERENCES tbl_product_roles (product_id, role_name)
+            ON DELETE RESTRICT;
     END IF;
 END $$;
 

@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- API surface: subscriptions and product-role grants
+-- API surface: subscriptions and direct product-role grants
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- name: ActiveSubscriptionId :one
@@ -19,3 +19,12 @@ CALL stp_UpsertProductPermission($1, $2, $3, $4, $5);
 
 -- name: DeleteProductPermission :one
 SELECT stp_DeleteProductPermission($1, $2, $3);
+
+-- name: UpsertSubscription :one
+SELECT * FROM stp_UpsertSubscription(
+    sqlc.arg('client_id'),
+    sqlc.arg('product_id'),
+    sqlc.arg('is_active'),
+    sqlc.narg('seat_limit'),
+    sqlc.narg('ends_at')
+);

@@ -17,6 +17,7 @@ SELECT cp.id,
        p.name        AS product_name,
        p.description AS product_description,
        p.base_url    AS product_base_url,
-       p.is_active   AS product_is_active
+       p.is_active   AS product_is_active,
+       p.accepts_api_clients AS product_accepts_api_clients
 FROM   tbl_client_products cp
 JOIN   tbl_products p ON p.id = cp.product_id;

@@ -1,6 +1,6 @@
 /****** Object: Stored Procedure [stp_UpdateGroup] ******/
--- Renames or re-describes a group, tenant-scoped. Zero rows means unknown or
--- another tenant's group.
+-- Renames or re-describes a group, tenant-scoped. System groups are
+-- excluded: zero rows means unknown, another tenant's, or a system group.
 --
 -- Implemented as a FUNCTION, not a PROCEDURE: the caller needs the result,
 -- and PostgreSQL procedures cannot return a result set.
@@ -16,7 +16,8 @@ AS $$
     SET    name        = p_name,
            description = p_description,
            updated_at  = now()
-    WHERE  id        = p_groupId
-      AND  client_id = p_clientId
+    WHERE  id          = p_groupId
+      AND  client_id   = p_clientId
+      AND  system_key IS NULL
     RETURNING *;
 $$;

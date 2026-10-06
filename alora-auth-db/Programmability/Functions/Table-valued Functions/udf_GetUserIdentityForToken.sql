@@ -1,7 +1,6 @@
 /****** Object: Table-valued Function [udf_GetUserIdentityForToken] ******/
--- The token-minting identity. Returns zero rows for a deprovisioned account,
--- which the caller maps to 403 — this is what stops a token being issued to
--- a user disabled during the authorization-code window.
+-- The token-minting identity. Returns zero rows for a deprovisioned account
+-- or a suspended tenant, which the caller maps to a refusal.
 --
 -- CREATE OR REPLACE so the build is idempotent.
 

@@ -11,8 +11,9 @@ CREATE TABLE IF NOT EXISTS tbl_users (
     password_hash        TEXT           NULL,
     account_type         "AccountType"  NOT NULL DEFAULT 'EMAIL',
     is_active            BOOLEAN        NOT NULL DEFAULT true,
-    is_global_admin      BOOLEAN        NOT NULL DEFAULT false,
     permissions_version  INTEGER        NOT NULL DEFAULT 1,
+    admin_version        INTEGER        NOT NULL DEFAULT 1,
+    login_policy_id      TEXT           NULL,
     created_at           TIMESTAMPTZ    NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ    NOT NULL DEFAULT now(),
     deleted_at           TIMESTAMPTZ    NULL,
@@ -26,6 +27,15 @@ DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_users_tbl_clients_client_id') THEN
         ALTER TABLE tbl_users ADD CONSTRAINT FK_tbl_users_tbl_clients_client_id
             FOREIGN KEY (client_id) REFERENCES tbl_clients (id)
+            ON DELETE RESTRICT;
+    END IF;
+END $$;
+--
+-- A user's own policy must belong to their tenant.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_users_tbl_login_policies_login_policy_id_client_id') THEN
+        ALTER TABLE tbl_users ADD CONSTRAINT FK_tbl_users_tbl_login_policies_login_policy_id_client_id
+            FOREIGN KEY (login_policy_id, client_id) REFERENCES tbl_login_policies (id, client_id)
             ON DELETE RESTRICT;
     END IF;
 END $$;

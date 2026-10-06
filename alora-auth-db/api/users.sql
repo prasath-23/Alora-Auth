@@ -11,11 +11,11 @@
 -- name: GetUserById :one
 SELECT * FROM udf_GetUserById($1);
 
--- name: GetUserFreshness :one
-SELECT * FROM udf_GetUserFreshness($1);
+-- name: ListLoginCandidates :many
+SELECT * FROM udf_ListLoginCandidates($1);
 
--- name: GetUserCredentialByEmail :one
-SELECT * FROM udf_GetUserCredentialByEmail($1);
+-- name: ListUserIdentitiesByEmail :many
+SELECT * FROM udf_ListUserIdentitiesByEmail($1);
 
 -- name: GetUserIdentityForToken :one
 SELECT * FROM udf_GetUserIdentityForToken($1);
@@ -25,6 +25,9 @@ SELECT * FROM udf_GetUserTenantScoped($1, $2);
 
 -- name: GetOAuthLinkableUser :one
 SELECT * FROM udf_GetOAuthLinkableUser($1, $2);
+
+-- name: GetUserForSsoLink :one
+SELECT * FROM udf_GetUserForSsoLink($1, $2);
 
 -- name: ListUsers :many
 SELECT * FROM udf_ListUsers(
@@ -44,8 +47,8 @@ SELECT * FROM udf_ListUserGroups(
 -- name: ListUserProductRoles :many
 SELECT * FROM udf_ListUserProductRoles($1, $2);
 
--- name: ListUserFeatures :many
-SELECT * FROM udf_ListUserFeatures($1, $2);
+-- name: GetUserLoginPolicy :one
+SELECT * FROM udf_GetUserLoginPolicy($1, $2);
 
 -- name: ActiveEmailExists :one
 SELECT udf_ActiveEmailExists($1, $2);
@@ -82,3 +85,14 @@ CALL stp_SoftDeleteUser($1, $2);
 
 -- name: BumpPermissionsVersion :exec
 CALL stp_BumpPermissionsVersion($1, $2);
+
+-- name: SetUserLoginPolicy :one
+SELECT stp_SetUserLoginPolicy(
+    sqlc.arg('user_id'),
+    sqlc.arg('client_id'),
+    sqlc.narg('policy_id')
+);
+
+-- name: CreatePlatformOwner :exec
+-- Provisioning only: fails under the application role by design.
+CALL stp_CreatePlatformOwner($1, $2);
