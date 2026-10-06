@@ -1,43 +1,35 @@
 import { api } from './apiClient'
+import { query } from '../utils/format'
 
-export async function resetPassword(token, new_password) {
-  const res = await api.post('/auth/reset-password', { token, new_password })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error ?? 'Failed to reset password')
-  }
-}
+// App Central's sign-in steps (/auth/*). Every POST here is refused unless it
+// comes from App Central's own origin, which is where this code runs.
 
-export async function authorize(email, password, { productId, redirectUrl, codeChallenge, codeChallengeMethod, state }) {
-  const res = await api.post('/auth/authorize', {
-    email, password,
-    product_id:            productId,
-    redirect_url:          redirectUrl,
-    code_challenge:        codeChallenge,
-    code_challenge_method: codeChallengeMethod,
-    ...(state != null && { state }),
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error ?? 'Authorization failed')
-  }
-  const { code } = await res.json()
-  return code
-}
+/** Which methods to offer for an address. Decided by its domain alone. */
+export const discover = email => api.post('/auth/login/discover', { email })
 
-/**
- * Build the Google OAuth initiation URL.
- * Embeds all PKCE params in the request so the Google callback can issue
- * an authorization code — identical to the password login flow.
- * The product app exchanges the code via POST /auth/token with the code_verifier.
- */
-export function getGoogleAuthUrl({ productId, redirectUrl, codeChallenge, codeChallengeMethod, state }) {
-  const params = new URLSearchParams({
-    product_id:            productId,
-    redirect_url:          redirectUrl,
-    code_challenge:        codeChallenge,
-    code_challenge_method: codeChallengeMethod,
-  })
-  if (state != null) params.set('state', state)
-  return `/auth/google?${params}`
-}
+export const passwordLogin = (email, password, returnTo) =>
+  api.post('/auth/login/password', { email, password, ...(returnTo ? { return_to: returnTo } : {}) })
+
+/** The companies of a pending account choice (after Google or SSO). */
+export const loginChoices = () => api.get('/auth/login/choices')
+
+export const chooseCompany = clientId => api.post('/auth/login/choose', { client_id: clientId })
+
+// Google and SSO are browser navigations: the API answers with a redirect to
+// the provider and, at the end, one back to App Central.
+export const googleStartURL = returnTo => `/auth/google/start${query({ return_to: returnTo })}`
+
+export const ssoStartURL = ({ connectionId, returnTo }) =>
+  `/auth/sso/start${query({ connection_id: connectionId, return_to: returnTo })}`
+
+export const lookupInvitation = token =>
+  api.get(`/auth/accept-invitation/lookup${query({ token })}`)
+
+export const acceptInvitation = (token, password) =>
+  api.post('/auth/accept-invitation', { token, password })
+
+export const acceptInvitationFederated = token =>
+  api.post('/auth/accept-invitation/federated', { token })
+
+export const resetPassword = (token, newPassword) =>
+  api.post('/auth/reset-password', { token, new_password: newPassword })

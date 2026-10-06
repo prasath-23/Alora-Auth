@@ -1,26 +1,28 @@
 import { create } from 'zustand'
 
-// status lifecycle:
-//   'bootstrapping'  → silentRefresh in flight on mount
-//   'authenticated'  → valid accessToken in memory
-//   'unauthenticated'→ no session / logout
+// status:
+//   'bootstrapping'   the first session refresh of this page load is in flight
+//   'authenticated'   an access token is in memory and `me` is loaded
+//   'unauthenticated' there is no usable session
 //
-// loggedOut: true when the transition to unauthenticated was an explicit logout
-//   (vs. never having been logged in). Used to show "signed out" notification.
-const useAuthStore = create((set) => ({
-  status:      'bootstrapping',
-  accessToken: null,
-  user:        null,
-  features:    new Set(),
-  loggedOut:   false,
+// me is GET /api/me: who the user is, in which company, and what App Central
+// should show them. It only decides what to RENDER; every API route checks its
+// own guard again.
+//
+// signedOut marks a session the user (or the server) ended on purpose, so the
+// login page can say so and does not offer to resume the page they were on.
+const useAuthStore = create(set => ({
+  status:    'bootstrapping',
+  me:        null,
+  notice:    null,
+  signedOut: false,
 
-  setAuthenticated: (accessToken, user, featureArray = []) =>
-    set({ status: 'authenticated', accessToken, user, features: new Set(featureArray), loggedOut: false }),
+  setAuthenticated: me => set({ status: 'authenticated', me, notice: null, signedOut: false }),
 
-  // Pass loggedOut=true when the user explicitly signed out or was kicked (password change).
-  // Pass loggedOut=false (default) for silent-refresh failures on cold load.
-  setUnauthenticated: (loggedOut = false) =>
-    set({ status: 'unauthenticated', accessToken: null, user: null, features: new Set(), loggedOut }),
+  setUnauthenticated: ({ notice = null, signedOut = false } = {}) =>
+    set({ status: 'unauthenticated', me: null, notice, signedOut }),
+
+  clearNotice: () => set({ notice: null }),
 }))
 
 export default useAuthStore

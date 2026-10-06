@@ -1,94 +1,79 @@
 import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-// Resolved from this file rather than process.cwd(): a relative cwd that does
-// not exist makes Node report ENOENT against the COMMAND, which reads as
-// "go is not installed" and sends you looking in the wrong place entirely.
-const API_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'alora-auth-api')
+// Seeding goes through cmd/bootstrap, connected as the schema owner, exactly
+// as an operator provisions a real deployment: companies and their first Admin
+// are what App Central deliberately has no API for. Everything after that —
+// invitations, groups, grants — the specs do through the API or the UI.
 
-// Seeding talks to Postgres directly rather than through the API: creating the
-// FIRST tenant and its first admin is a bootstrap operation the API deliberately
-// does not expose (there is no self-service tenant signup).
-const CONTAINER_DB = ['-U', 'postgres', '-d', 'alora_e2e']
+// Must match scripts/e2e-up.sh, which writes stack.json here.
+const STATE_DIR = process.env.ALORA_E2E_STATE || join(tmpdir(), 'alora-e2e')
 
-let _cid = null
-function containerId() {
-  if (_cid) return _cid
-  // Must match ALORA_DB_PORT in the API's scripts (default 55532).
-  const port = process.env.ALORA_DB_PORT || '55532'
-  _cid = execFileSync('docker', ['ps', '-q', '--filter', `publish=${port}`], { encoding: 'utf8' })
-    .trim().split(/\r?\n/)[0]
-  if (!_cid) {
-    throw new Error('e2e Postgres is not running — run: bash ../alora-auth-api/scripts/e2e-up.sh')
+let cached = null
+export function stack() {
+  if (!cached) {
+    const file = join(STATE_DIR, 'stack.json')
+    try {
+      cached = JSON.parse(readFileSync(file, 'utf8'))
+    } catch {
+      throw new Error(`the e2e stack is not running (no ${file}) — run: bash ../alora-auth-api/scripts/e2e-up.sh`)
+    }
   }
-  return _cid
-}
-
-function psql(sql) {
-  const out = execFileSync(
-    'docker',
-    ['exec', containerId(), 'psql', ...CONTAINER_DB, '-t', '-A', '-c', sql],
-    { encoding: 'utf8', env: { ...process.env, MSYS_NO_PATHCONV: '1' } },
-  ).trim()
-  // psql emits the RETURNING value AND a command tag ("INSERT 0 1"); only the
-  // first line carries the value we asked for.
-  return out.split(/\r?\n/)[0].trim()
+  return cached
 }
 
 export const suffix = () => randomBytes(4).toString('hex')
 
-/**
- * Creates an isolated tenant plus a global-admin user.
- *
- * Every call uses a unique name/email/domain: verified domains and per-tenant
- * emails are unique indexes, so shared fixtures would collide across specs.
- */
-export function seedTenant({ password = 'e2e-Password-123' } = {}) {
-  const s = suffix()
-  const email = `admin-${s}@e2e-${s}.test`
-
-  const clientId = psql(
-    `INSERT INTO tbl_clients (name, is_active) VALUES ('E2E ${s}', true) RETURNING id`)
-  const productId = psql(
-    `INSERT INTO tbl_products (key, name, base_url, is_active)
-     VALUES ('E2E-${s}', 'E2E Product', 'http://127.0.0.1:5173', true) RETURNING id`)
-  psql(`INSERT INTO tbl_client_products (client_id, product_id, is_active)
-        VALUES ('${clientId}','${productId}',true)`)
-
-  // The hash is produced by the Go binary itself, so the seeded password is
-  // hashed with EXACTLY the argon2id parameters the API verifies against —
-  // a hard-coded hash would silently rot if those parameters ever changed.
-  const passwordHash = execFileSync('go', ['run', './internal/tools/hashpw', password], {
-    cwd: API_DIR, encoding: 'utf8',
-  }).trim()
-
-  const userId = psql(
-    `INSERT INTO tbl_users (client_id, email, password_hash, account_type, is_active, is_global_admin)
-     VALUES ('${clientId}','${email}','${passwordHash}','EMAIL',true,true) RETURNING id`)
-
-  return { clientId, productId, userId, email, password, suffix: s }
-}
+export const PASSWORD = 'e2e-Password-123'
 
 /**
- * Adds a second user to an EXISTING tenant.
+ * A company with one Admin, and a product registered for a sample-product
+ * backend at http://127.0.0.1:<productPort>: its launch address, its exact
+ * redirect URI, its role catalogue and a client secret. The company subscribes
+ * to it and its Admins group opens it with the first role.
  *
- * Mutations that change permissions (a grant, a group membership) bump the
- * target's permissions_version, which immediately invalidates their access
- * token. Tests must therefore act on somebody OTHER than the caller, or they
- * invalidate the very token they are using — which is correct behaviour, not a
- * bug, and exactly what the freshness check exists to do.
+ * Every call is unique (addresses, names and product keys all carry a random
+ * suffix) unless `email` is given — which is how a spec gives one address
+ * accounts in two companies.
  */
-export function seedExtraUser(clientId) {
+export function seedCompany({ email, password = PASSWORD, productPort, roles = ['Admin', 'Editor', 'Viewer'] } = {}) {
   const s = suffix()
-  const email = `member-${s}@e2e.test`
-  const id = psql(
-    `INSERT INTO tbl_users (client_id, email, account_type, is_active)
-     VALUES ('${clientId}','${email}','OAUTH_ONLY',true) RETURNING id`)
-  return { id, email }
+  const company = `E2E Co ${s}`
+  const productKey = `E2E-${s}`
+  const productName = `Sample ${s}`
+  const origin = `http://127.0.0.1:${productPort}`
+  email = (email ?? `admin-${s}@e2e-${s}.test`).toLowerCase()
+
+  const out = execFileSync(stack().bootstrap, [
+    'demo',
+    '-company', company,
+    '-email', email,
+    '-product', productKey,
+    '-product-name', productName,
+    '-base-url', `${origin}/`,
+    '-initiate-login-uri', `${origin}/login/initiate`,
+    '-redirect-uri', `${origin}/callback`,
+    '-roles', roles.join(','),
+  ], {
+    encoding: 'utf8',
+    env: { ...process.env, DATABASE_URL: stack().ownerDsn, BOOTSTRAP_PASSWORD: password },
+  })
+
+  const id = label => out.match(new RegExp(`^\\s*${label}\\s+.*\\(([0-9a-f-]{36})\\)`, 'm'))?.[1]
+  const value = label => out.match(new RegExp(`^\\s*${label}\\s+(\\S+)`, 'm'))?.[1]
+  const seeded = {
+    company, companyId: id('company'), email, password, adminId: id('admin'),
+    productKey, productName, productId: value('client_id'), clientSecret: value('client_secret'),
+    origin, productPort, roles,
+  }
+  for (const [k, v] of Object.entries(seeded)) {
+    if (v === undefined) throw new Error(`bootstrap demo printed no ${k}:\n${out}`)
+  }
+  return seeded
 }
 
-export function query(sql) {
-  return psql(sql)
-}
+/** The platform Owner that e2e-up.sh provisioned. */
+export const owner = () => stack().owner
