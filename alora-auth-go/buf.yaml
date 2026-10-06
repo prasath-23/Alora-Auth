@@ -1,0 +1,11 @@
+# The protos products and applications build against. `buf lint` keeps them to
+# the standard style; scripts/generate.sh regenerates authpb from them.
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

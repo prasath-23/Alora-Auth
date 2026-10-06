@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package alora.auth.v1;
+
+option go_package = "github.com/prasath-23/Alora-Auth/alora-auth-go/authpb;authpb";
+
+// TokenService issues an API client — an application with no person behind it —
+// a token for one product on its list: the client-credentials grant, over gRPC.
+// The client authenticates with its client ID and secret in the call's
+// metadata, exactly as at the HTTP token endpoint:
+//
+//   authorization: Basic base64(form-encoded client_id ":" form-encoded client_secret)
+//
+// App Central answers with the same code that answers POST /oauth/token, so the
+// same rules apply: the product must be on the client's list and accept API
+// clients, and every scope asked for must be one the client holds. A failure
+// carries a google.rpc.ErrorInfo whose reason is the OAuth error code
+// (invalid_client, invalid_target, invalid_scope, ...).
+service TokenService {
+  // GetToken returns an access token for the product named by resource.
+  rpc GetToken(GetTokenRequest) returns (GetTokenResponse);
+}
+
+// GetTokenRequest names the product and, optionally, the scopes wanted.
+message GetTokenRequest {
+  // The product, as "product:<key>" (RFC 8707).
+  string resource = 1;
+  // Some of the scopes the client holds; none asks for all of them.
+  repeated string scopes = 2;
+}
+
+// GetTokenResponse is an access token for one product.
+message GetTokenResponse {
+  // The token: a JWT whose audience is "product:<key>".
+  string access_token = 1;
+  // Always "Bearer".
+  string token_type = 2;
+  // The token's lifetime, in seconds.
+  int32 expires_in = 3;
+  // The scopes the token carries.
+  repeated string scopes = 4;
+}

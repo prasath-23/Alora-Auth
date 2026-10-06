@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package alora.demo.inventory.v1;
+
+option go_package = "github.com/prasath-23/Alora-Auth/alora-auth-go/examples/grpcdemo/inventorypb;inventorypb";
+
+// InventoryService is the demo product's gRPC API: what an application calls
+// with a token App Central issued to its API client. The product checks each
+// call's token with the Go helper: ListItems needs the scope grpc:read,
+// AddItem needs grpc:edit.
+service InventoryService {
+  // ListItems returns every item. Needs grpc:read.
+  rpc ListItems(ListItemsRequest) returns (ListItemsResponse);
+  // AddItem adds an item. Needs grpc:edit.
+  rpc AddItem(AddItemRequest) returns (AddItemResponse);
+}
+
+// Item is one thing in the inventory.
+message Item {
+  int64 id = 1;
+  string name = 2;
+}
+
+// ListItemsRequest asks for every item.
+message ListItemsRequest {}
+
+// ListItemsResponse is the inventory, and who asked.
+message ListItemsResponse {
+  repeated Item items = 1;
+  // The API client the token was issued to (aci_…).
+  string caller = 2;
+}
+
+// AddItemRequest names the item to add.
+message AddItemRequest {
+  string name = 1;
+}
+
+// AddItemResponse is the item added.
+message AddItemResponse {
+  Item item = 1;
+}
