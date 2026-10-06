@@ -60,6 +60,15 @@ DO $$ BEGIN
             ON DELETE CASCADE;
     END IF;
 END $$;
+--
+-- Every generation belongs to a family of the same user and tenant.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tbl_user_sessions_family') THEN
+        ALTER TABLE tbl_user_sessions ADD CONSTRAINT FK_tbl_user_sessions_family
+            FOREIGN KEY (family_id, user_id, client_id) REFERENCES tbl_session_families (id, user_id, client_id)
+            ON DELETE CASCADE;
+    END IF;
+END $$;
 
 -- Unique constraints and indexes.
 CREATE UNIQUE INDEX IF NOT EXISTS UQ_tbl_user_sessions_session_uuid
@@ -86,7 +95,7 @@ CREATE INDEX IF NOT EXISTS IX_tbl_user_sessions_family_id
 CREATE INDEX IF NOT EXISTS IX_tbl_user_sessions_user_client
     ON tbl_user_sessions (user_id, client_id);
 --
--- Serves the active-sessions list.
+-- Serves revoking every session of a user.
 CREATE INDEX IF NOT EXISTS IX_tbl_user_sessions_user_revoked
     ON tbl_user_sessions (user_id, revoked_at);
 --

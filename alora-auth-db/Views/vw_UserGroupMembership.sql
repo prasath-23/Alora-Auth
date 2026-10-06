@@ -11,6 +11,7 @@ SELECT ug.user_id,
        ug.client_id,
        ug.group_id,
        g.name        AS group_name,
+       g.system_key,
        ug.assigned_at
 FROM   tbl_user_groups ug
 JOIN   tbl_groups g ON g.id = ug.group_id

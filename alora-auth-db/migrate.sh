@@ -38,7 +38,7 @@ trap cleanup EXIT
 
 if [ "$MODE" = docker ]; then
   echo "==> starting throwaway PostgreSQL"
-  CONTAINER=$(MSYS_NO_PATHCONV=1 docker run -d --rm -p "$DB_PORT":5432 \
+  CONTAINER=$(MSYS_NO_PATHCONV=1 docker run -d --rm -p "127.0.0.1:$DB_PORT":5432 \
     -e POSTGRES_PASSWORD=test -e POSTGRES_DB=alora postgres:16-alpine)
   for _ in $(seq 1 40); do
     sleep 2

@@ -1,73 +1,54 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
-import { useFeature, ADMIN_FEATURES } from '../../utils/features'
-import { api } from '../../services/apiClient'
+import { can, manages } from '../../utils/scopes'
+import { NotAllowed } from '../../components/auth/Guard'
+
+// The company admin area: each section opens with its feature's read scope,
+// and its buttons with the edit scope. A company's Admins hold every scope;
+// anyone else sees what their groups and extras give — and a group's manager
+// sees the groups they run. The API applies the same rules to every request.
+export function adminSections(me) {
+  return [
+    { to: '/admin/users',       label: 'Users',       show: can(me, 'users:read') },
+    { to: '/admin/groups',      label: 'Groups',      show: can(me, 'groups:read') },
+    { to: '/admin/my-groups',   label: 'Groups you manage', show: manages(me) },
+    { to: '/admin/invitations', label: 'Invitations', show: can(me, 'invitations:read') },
+    { to: '/admin/sessions',    label: 'Sessions',    show: can(me, 'sessions:read') },
+    { to: '/admin/products',    label: 'Products',    show: can(me, 'products:read') },
+    { to: '/admin/company',     label: 'Company',     show: can(me, 'company:read') },
+    { to: '/admin/api-clients', label: 'API clients', show: can(me, 'api-clients:read') },
+  ].filter(s => s.show)
+}
 
 export default function AdminLayout() {
-  const { user, accessToken, setUnauthenticated } = useAuthStore()
-
-  async function handleLogout() {
-    await api.post('/auth/logout', null, accessToken).catch(() => {})
-    setUnauthenticated(true)
-    // ProtectedRoute re-renders inline with the "signed out" notification — no redirect needed.
-  }
+  const me = useAuthStore(s => s.me)
+  const sections = adminSections(me)
+  if (sections.length === 0) return <NotAllowed />
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-56 shrink-0 border-r border-gray-200 bg-white flex flex-col">
-        <div className="px-4 py-5 border-b border-gray-200">
-          <p className="text-sm font-semibold text-gray-900">Alora Auth</p>
-          <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.email}</p>
-        </div>
-
-        <nav className="flex-1 px-2 py-4 space-y-0.5 text-sm overflow-y-auto">
-          <NavItem to="/admin" label="Dashboard" end />
-          <NavItem to="/admin/invitations" label="Invitations" />
-          <ConditionalNavItem to="/admin/users"    label="Users"    featureKey={ADMIN_FEATURES.USERS_VIEW} />
-          <ConditionalNavItem to="/admin/groups"   label="Groups"   featureKey={ADMIN_FEATURES.GROUPS_VIEW} />
-          <ConditionalNavItem to="/admin/sessions" label="Sessions" featureKey={ADMIN_FEATURES.SESSIONS_VIEW} />
-          <ConditionalNavItem to="/admin/products" label="Products" featureKey={ADMIN_FEATURES.PRODUCTS_VIEW} />
-          <ConditionalNavItem to="/admin/client"   label="Client"   featureKey={ADMIN_FEATURES.CLIENT_VIEW} />
+    <div className="flex flex-col gap-8 md:flex-row">
+      <aside className="md:w-48 md:shrink-0">
+        <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-gray-400">{me.company.name}</p>
+        <nav className="flex flex-row flex-wrap gap-0.5 text-sm md:flex-col" aria-label="Admin">
+          {sections.map(s => (
+            <NavLink
+              key={s.to} to={s.to}
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 transition-colors ${isActive ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+            >
+              {s.label}
+            </NavLink>
+          ))}
         </nav>
-
-        <div className="px-2 py-3 border-t border-gray-200 space-y-0.5">
-          <NavItem to="/admin/profile" label="Profile" />
-          <button
-            onClick={handleLogout}
-            className="w-full text-left rounded-md px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
       </aside>
-
-      <main className="flex-1 p-8 overflow-auto">
-        <Outlet />
-      </main>
+      <div className="min-w-0 flex-1"><Outlet /></div>
     </div>
   )
 }
 
-function NavItem({ to, label, end = false }) {
-  return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) =>
-        `block rounded-md px-3 py-2 transition-colors ${
-          isActive
-            ? 'bg-gray-100 text-gray-900 font-medium'
-            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-        }`
-      }
-    >
-      {label}
-    </NavLink>
-  )
-}
-
-function ConditionalNavItem({ to, label, featureKey }) {
-  const has = useFeature(featureKey)
-  if (!has) return null
-  return <NavItem to={to} label={label} />
+/** /admin itself: the first section this user may see. */
+export function AdminHome() {
+  const me = useAuthStore(s => s.me)
+  const first = adminSections(me)[0]
+  return first ? <Navigate to={first.to} replace /> : <NotAllowed />
 }

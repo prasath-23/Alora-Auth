@@ -1,4 +1,4 @@
-// Command api is the Alora Auth server entrypoint: it loads and validates
+// Command api is the App Central server entrypoint: it loads and validates
 // configuration, initialises the signing keys, opens the database, assembles the
 // middleware chain in a security-significant order, and serves until signalled.
 package main
@@ -19,25 +19,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alora/auth/internal/admin"
-	"github.com/alora/auth/internal/auth"
 	"github.com/alora/auth/internal/config"
-	"github.com/alora/auth/internal/crypto/jwtkeys"
-	"github.com/alora/auth/internal/crypto/password"
-	"github.com/alora/auth/internal/health"
-	"github.com/alora/auth/internal/invitation"
-	"github.com/alora/auth/internal/mailer"
-	"github.com/alora/auth/internal/middleware"
-	"github.com/alora/auth/internal/oauth"
-	"github.com/alora/auth/internal/platform/audit"
-	"github.com/alora/auth/internal/platform/database"
-	"github.com/alora/auth/internal/platform/database/sqlc"
-	"github.com/alora/auth/internal/platform/httpx"
-	"github.com/alora/auth/internal/platform/jobs"
-	"github.com/alora/auth/internal/platform/logger"
-	"github.com/alora/auth/internal/reset"
-	"github.com/alora/auth/internal/session"
+	"github.com/alora/auth/internal/core/shared"
+	"github.com/alora/auth/internal/core/shared/crypto/jwtkeys"
+	"github.com/alora/auth/internal/core/shared/crypto/password"
+	"github.com/alora/auth/internal/database/contexts"
+	"github.com/alora/auth/internal/infrastructure"
+	"github.com/alora/auth/internal/middlewares"
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -53,11 +43,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	log := logger.New(cfg.IsProd)
+	log := shared.NewLogger(cfg.IsProd)
 
 	// 2. Signing keys, loaded ONCE. Doing this at boot means a malformed key is a
 	//    startup failure rather than a 500 on the first login.
-	if err := jwtkeys.Init(cfg.JWT.PrivateKeyPEM, cfg.JWT.PublicKeyPEM, cfg.JWT.KeyID, cfg.JWT.Issuer); err != nil {
+	if err := initKeys(cfg); err != nil {
 		return err
 	}
 	// Precompute the anti-enumeration dummy hash so the first unknown-user login
@@ -68,32 +58,20 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := database.New(ctx, cfg.DatabaseURL, database.Options{
+	db, err := contexts.Connect(ctx, cfg.DatabaseURL, contexts.Options{
 		MaxConns: int32(cfg.DBMaxConns),
 		MinConns: int32(cfg.DBMinConns),
 	})
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
-	q := sqlc.New(pool)
+	defer db.Close()
 
-	authRepo := auth.NewRepo(q)
-	authSvc := auth.NewService(authRepo, cfg.JWT.AccessTTL, cfg.JWT.APIAudience)
-	auditLog := audit.New(audit.NewRepo(q), log)
-	mail := mailer.New(cfg.Mail)
-	jar := httpx.NewCookieJar(cfg.Cookie.Domain, cfg.IsProd, cfg.Cookie.Secret)
-	sessionSvc := session.NewService(pool, q, cfg.JWT.RefreshTTL)
-	oauthH := oauth.NewHandler(oauth.NewService(q), authSvc, sessionSvc, jar)
-	inviteH := invitation.NewHandler(invitation.NewService(pool, q, cfg.FrontendURL), mail, auditLog, q)
-	resetH := reset.NewHandler(reset.NewService(pool, q, cfg.FrontendURL), mail, auditLog)
-	adminH := admin.New(pool, q, auditLog)
-	googleH := oauth.NewGoogleHandler(oauth.NewService(q), oauth.GoogleConfig{
-		ClientID: cfg.Google.ClientID, ClientSecret: cfg.Google.ClientSecret,
-		RedirectURI: cfg.Google.RedirectURI, FrontendURL: cfg.FrontendURL,
-	}, jar)
-
-	r, err := newRouter(cfg, log, q, authRepo, oauthH, inviteH, resetH, adminH, googleH)
+	m, err := newModules(cfg, log, db)
+	if err != nil {
+		return err
+	}
+	r, err := newRouter(cfg, log, m)
 	if err != nil {
 		return err
 	}
@@ -108,17 +86,44 @@ func run() error {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	// Sweeps start only once the process is committed to serving, so a failed
-	// boot never leaves background writers running against the database.
-	jobs.New(q, log).Start(ctx)
+	// Bind first. A port that is already taken then fails the boot here, before
+	// anything has started writing to the database.
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		return err
+	}
+	// And the gRPC listener, when there is one: TokenService, for applications.
+	var gsrv *grpc.Server
+	var gln net.Listener
+	if cfg.GRPC.Enabled() {
+		if gsrv, err = newGRPCServer(cfg, log, m); err != nil {
+			return err
+		}
+		if gln, err = net.Listen("tcp", net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.GRPC.Port))); err != nil {
+			return err
+		}
+	}
 
-	errCh := make(chan error, 1)
+	// Sweeps start only once the listener is bound, so a failed boot never leaves
+	// background writers running against the database.
+	infrastructure.NewJobRunner(db, log).Start(ctx)
+
+	errCh := make(chan error, 2)
 	go func() {
-		log.Info("listening", "addr", srv.Addr, "env", cfg.Env)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Info("listening", "addr", srv.Addr, "env", cfg.Env, "issuer", cfg.JWT.Issuer)
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
+	if gsrv != nil {
+		go func() {
+			log.Info("listening for gRPC", "addr", gln.Addr().String(), "tls", cfg.GRPC.TLS(),
+				"behindTLSProxy", cfg.GRPC.BehindTLSProxy)
+			if err := gsrv.Serve(gln); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+				errCh <- err
+			}
+		}()
+	}
 
 	select {
 	case err := <-errCh:
@@ -127,23 +132,49 @@ func run() error {
 		log.Info("shutdown signal received")
 	}
 
-	// Drain in-flight requests before closing the pool, so no handler loses its
-	// connection mid-transaction.
+	// Drain in-flight requests on both doors before closing the pool, so no
+	// handler loses its connection mid-transaction — within one 15-second budget,
+	// after which gRPC calls still running are cut off.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	if gsrv != nil {
+		stopped := make(chan struct{})
+		go func() {
+			gsrv.GracefulStop()
+			close(stopped)
+		}()
+		select {
+		case <-stopped:
+		case <-shutdownCtx.Done():
+			gsrv.Stop()
+		}
+	}
 	return srv.Shutdown(shutdownCtx)
+}
+
+// initKeys loads the signing key and every verify-only key being retired.
+func initKeys(cfg *config.Config) error {
+	if err := jwtkeys.Init(cfg.JWT.PrivateKeyPEM, cfg.JWT.PublicKeyPEM, cfg.JWT.KeyID, cfg.JWT.Issuer); err != nil {
+		return err
+	}
+	for _, k := range cfg.JWT.VerifyKeys {
+		if err := jwtkeys.AddVerifyKey(k.KeyID, k.PublicKeyPEM); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // newRouter assembles the engine and routes. Extracted from run() so integration
 // tests can exercise the REAL middleware chain and routing table rather than a
 // hand-rolled approximation that could drift from production.
-func newRouter(cfg *config.Config, log *slog.Logger, q *sqlc.Queries, authRepo *auth.Repo, oauthH *oauth.Handler, inviteH *invitation.Handler, resetH *reset.Handler, adminH *admin.Handler, googleH *oauth.GoogleHandler) (*gin.Engine, error) {
+func newRouter(cfg *config.Config, log *slog.Logger, m *modules) (*gin.Engine, error) {
 	// 4. HTTP engine. gin.New (not Default) so no unvetted middleware is present.
 	if cfg.IsProd {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	r.RedirectTrailingSlash = false // /admin/users/ must not 301 to /admin/users
+	r.RedirectTrailingSlash = false // /api/admin/users/ must not 301 to /api/admin/users
 	// Gin silently returns 404 for a known path with the wrong verb unless this is
 	// enabled, so NoMethod would never fire and clients could not distinguish
 	// "route does not exist" from "wrong method".
@@ -156,108 +187,232 @@ func newRouter(cfg *config.Config, log *slog.Logger, q *sqlc.Queries, authRepo *
 		return nil, err
 	}
 
+	// The OAuth endpoints a product's BACKEND calls. One backend calls them for
+	// all its users from one address, so they are kept out of the per-address
+	// global budget and given one keyed by the client instead.
+	serverToServer := []string{"/oauth/token", "/oauth/revoke", "/oauth/introspect"}
+
 	// 5. Middleware chain — ORDER IS SEMANTIC.
-	r.Use(httpx.RequestID())                 // first: everything downstream logs it
-	r.Use(httpx.WithLogger(log))             //
-	r.Use(gin.Recovery())                    // a panic must become a 500, not a dropped conn
-	r.Use(httpx.ErrorHandler())              // renders errors recorded by later handlers
-	r.Use(httpx.SecurityHeaders(cfg.IsProd)) // headers on EVERY response, including errors
-	r.Use(httpx.NewCORS(authRepo, cfg.IsProd).Middleware())
-	r.Use(httpx.BodyLimit(65536)) // before any body is read
+	r.Use(middlewares.RequestID())                 // first: everything downstream logs it
+	r.Use(middlewares.WithLogger(log))             //
+	r.Use(middlewares.Recovery())                  // a panic becomes the 500 envelope, not a dropped conn
+	r.Use(middlewares.ErrorHandler())              // renders errors recorded by later handlers
+	r.Use(middlewares.SecurityHeaders(cfg.IsProd)) // headers on EVERY response, including errors
+	r.Use(middlewares.WellKnownCORS())             // CORS exists for /.well-known/* alone
+	r.Use(middlewares.BodyLimit(65536))            // before any body is read
 
-	globalLimiter := httpx.NewRateLimiter(cfg.RateLimit.GlobalMax, time.Minute)
-	r.Use(globalLimiter.Limit(nil))
+	globalLimiter := middlewares.NewRateLimiter(cfg.RateLimit.GlobalMax, time.Minute)
+	r.Use(globalLimiter.LimitExcept(nil, serverToServer...))
+	// Before any handler reads a path or query parameter: text the database
+	// cannot store (a NUL, bytes that are not UTF-8) is refused with a 400.
+	r.Use(middlewares.StorableText())
+	// Last before any route: while memory is over its ceiling, every request is
+	// shed with a 503 before authentication or a handler spends anything on it.
+	r.Use(middlewares.UnderPressure(m.pressure))
 
-	r.NoRoute(httpx.NotFound())
-	r.NoMethod(httpx.MethodNotAllowed())
+	// The per-route budgets below are sized for one person at one address;
+	// RATE_LIMIT_SCALE multiplies them all at once (config.RateLimitConfig.Scale).
+	scaled := func(max int, window time.Duration) *middlewares.RateLimiter {
+		return middlewares.NewRateLimiter(max*cfg.RateLimit.Scale, window)
+	}
+
+	r.NoRoute(middlewares.NotFound())
+	r.NoMethod(middlewares.MethodNotAllowed())
 
 	// 6. Routes.
-	h := health.New(q)
-	r.GET("/health", h.Live)
-	r.GET("/health/ready", h.Ready)
-	r.GET("/health/pressure", h.Pressure)
-	r.GET("/auth/jwks", auth.JWKS)
+	r.GET("/health", m.health.Live)
+	r.GET("/health/ready", m.health.Ready)
+	r.GET("/health/pressure", m.health.Pressure)
 
-	// Login + session routes. Each carries a TIGHTER limiter than the global one:
-	// these are the endpoints an attacker actually targets.
-	//
-	// /auth/authorize is keyed by ip|email so that flooding one victim's address
-	// cannot exhaust every other user's budget from the same NAT egress.
-	authorizeLimiter := httpx.NewRateLimiter(cfg.RateLimit.AuthorizeMaxIP, time.Minute)
-	tokenLimiter := httpx.NewRateLimiter(20, time.Minute)
-	refreshLimiter := httpx.NewRateLimiter(30, time.Minute)
+	// Standards: public, cacheable, readable from any origin.
+	r.GET("/.well-known/openid-configuration", m.wellKnown.Discovery)
+	r.GET("/.well-known/jwks.json", m.wellKnown.JWKS)
 
-	r.POST("/auth/authorize", authorizeLimiter.Limit(emailKey), oauthH.Authorize)
-	r.POST("/auth/token", tokenLimiter.Limit(nil), oauthH.Token)
-	r.POST("/auth/refresh", refreshLimiter.Limit(nil), oauthH.Refresh)
-	r.POST("/auth/logout", refreshLimiter.Limit(nil), oauthH.Logout)
+	// The OpenID Provider. /oauth/authorize is a browser navigation carrying the
+	// App Central session cookie; the rest are server to server, authenticated
+	// by the product's client secret.
+	authorizeLimiter := scaled(60, time.Minute)
+	// The token endpoint's budgets are shared with its gRPC door (newGRPCServer):
+	// per client, and — since that key is an id the caller picks — failed client
+	// authentications per address, so guessing secrets across made-up ids is
+	// bounded too, whichever door the guesses come through.
+	clientLimiter := m.tokenClients
+	failedClientAuth := m.tokenFailures.LimitFailures(func(c *gin.Context) bool {
+		return c.Writer.Status() == http.StatusUnauthorized
+	})
+	r.GET("/oauth/authorize", authorizeLimiter.Limit(nil), m.oauth.Authorize)
+	r.POST("/oauth/token", failedClientAuth, clientLimiter.Limit(basicClientID), m.oauth.Token)
+	r.POST("/oauth/revoke", failedClientAuth, clientLimiter.Limit(basicClientID), m.oauth.Revoke)
+	r.POST("/oauth/introspect", failedClientAuth, clientLimiter.Limit(basicClientID), m.oauth.Introspect)
 
-	// Direct admin-portal login. Same tight ip|email keying as /auth/authorize:
-	// both accept a password, so both are credential-stuffing targets.
-	sessionLimiter := httpx.NewRateLimiter(10, time.Minute)
-	oauthH2Limiter := httpx.NewRateLimiter(30, time.Minute)
-	r.POST("/auth/session", sessionLimiter.Limit(emailKey), oauthH.SessionLogin)
-
-	// Federated login. Both legs are browser navigations, so failures redirect to
-	// the frontend rather than returning a JSON error.
-	r.GET("/auth/google", oauthH2Limiter.Limit(nil), googleH.Start)
-	r.GET("/auth/google/callback", oauthH2Limiter.Limit(nil), googleH.Callback)
-
+	// App Central sign-in. Every state-changing request here carries, or is about
+	// to receive, the session cookie, so each must come from App Central's own
+	// origin (SameOriginOnly) with a JSON body (shared.BindJSON).
+	auth := r.Group("/auth", middlewares.SameOriginOnly(cfg.FrontendURL, cfg.JWT.Issuer))
+	passwordLimiter := rateLimiter(m.rlStore, "password", cfg.RateLimit.AuthorizeMaxIP, time.Minute)
+	chooseLimiter := scaled(20, time.Minute)
+	discoverLimiter := scaled(60, time.Minute)
+	refreshLimiter := scaled(60, time.Minute)
+	federatedLimiter := scaled(30, time.Minute)
+	// Keyed by ip|email so that flooding one victim's address cannot exhaust
+	// every other user's budget behind the same NAT egress.
+	auth.POST("/login/password", passwordLimiter.Limit(emailKey), m.login.Password)
+	auth.POST("/login/discover", discoverLimiter.Limit(nil), m.login.Discover)
+	auth.GET("/login/choices", chooseLimiter.Limit(nil), m.login.Choices)
+	auth.POST("/login/choose", chooseLimiter.Limit(nil), m.login.Choose)
+	auth.POST("/central/refresh", refreshLimiter.Limit(nil), m.login.Refresh)
+	auth.POST("/central/logout", refreshLimiter.Limit(nil), m.login.Logout)
+	// Federated sign-in. Every leg is a browser navigation, so failures redirect
+	// to the login page rather than returning a JSON error.
+	auth.GET("/google/start", federatedLimiter.Limit(nil), m.login.GoogleStart)
+	auth.GET("/google/callback", federatedLimiter.Limit(nil), m.login.GoogleCallback)
+	auth.GET("/sso/start", federatedLimiter.Limit(nil), m.login.SSOStart)
+	auth.GET("/sso/callback", federatedLimiter.Limit(nil), m.login.SSOCallback)
 	// Public token-redemption routes. Limited per 15 minutes because each one
 	// accepts a secret token: a loose limit here is an offline-guessing budget.
-	inviteLimiter := httpx.NewRateLimiter(10, 15*time.Minute)
-	lookupLimiter := httpx.NewRateLimiter(20, 15*time.Minute)
-	r.GET("/auth/accept-invitation/lookup", lookupLimiter.Limit(nil), inviteH.Lookup)
-	r.POST("/auth/accept-invitation", inviteLimiter.Limit(nil), inviteH.Accept)
-	r.POST("/auth/reset-password", inviteLimiter.Limit(nil), resetH.Consume)
-	r.POST("/auth/accept-invitation/google", inviteLimiter.Limit(nil), inviteH.AcceptGoogle)
+	inviteLimiter := scaled(10, 15*time.Minute)
+	lookupLimiter := scaled(20, 15*time.Minute)
+	auth.GET("/accept-invitation/lookup", lookupLimiter.Limit(nil), m.invitations.Lookup)
+	auth.POST("/accept-invitation", inviteLimiter.Limit(nil), m.invitations.Accept)
+	auth.POST("/accept-invitation/federated", inviteLimiter.Limit(nil), m.invitations.AcceptFederated)
+	auth.POST("/reset-password", inviteLimiter.Limit(nil), m.resets.Consume)
 
-	// Authenticated admin surface. authenticate → requireFresh runs for every
-	// route in this group; per-route guards are added by each feature.
-	adminGrp := r.Group("/admin")
-	adminGrp.Use(middleware.Authenticate(cfg.JWT.APIAudience))
-	adminGrp.Use(middleware.RequireFresh(authRepo))
-	// Invitations: admin-only, tenant-scoped inside each handler.
-	adminGrp.POST("/invitations", middleware.RequireAdmin(), inviteH.Create)
-	adminGrp.GET("/invitations", middleware.RequireAdmin(), inviteH.List)
-	adminGrp.DELETE("/invitations/:id", middleware.RequireAdmin(), inviteH.Revoke)
+	// App Central's API. Only an App Central token is accepted — a product's
+	// token names another audience and is refused however valid — and its
+	// session is re-checked against the database on every request.
+	api := r.Group("/api")
+	api.Use(middlewares.Authenticate(cfg.JWT.AppCentralAudience))
+	api.Use(middlewares.RequireFresh(m.authSvc))
 
-	// Issuing a reset is a takeover primitive, so it needs its own feature grant
-	// rather than blanket admin.
-	adminGrp.POST("/users/:id/password-reset",
-		middleware.RequireFeature(authRepo, "passwords:reset"), resetH.Issue)
+	api.GET("/me", m.me.Me)
+	api.GET("/me/apps", m.me.Apps)
+	// Re-verifying the current password is a guess at it, so the account — not
+	// the address — gets a budget: a stolen token used from many addresses
+	// still gets five tries per fifteen minutes.
+	passwordChangeLimiter := rateLimiter(m.rlStore, "password-change", 5*cfg.RateLimit.Scale, 15*time.Minute)
+	callerKey := func(c *gin.Context) string { return middlewares.ActorFrom(c).UserID }
+	api.POST("/me/change-password", passwordChangeLimiter.LimitBy(callerKey), m.me.ChangePassword)
 
-	adminGrp.GET("/me/features", middleware.RequireAdmin(), adminH.MyFeatures)
-	// Only requireFresh (inherited) guards this: any authenticated user may
-	// change their OWN password, and the current password is re-verified inside.
-	adminGrp.POST("/me/change-password", adminH.ChangePassword)
+	// A group manager's door: the groups the caller runs, in their own company.
+	// It needs no scope — being a group's manager is not one — and every call
+	// asks the database whether the caller manages that group; the writes ask
+	// again at the moment of the change. An add answers differently for an
+	// unknown address, a member and someone above the caller, so the account
+	// gets a budget of writes.
+	managerLimiter := scaled(60, 15*time.Minute)
+	api.GET("/me/managed-groups", m.managedGroups.List)
+	api.GET("/me/managed-groups/:gid", m.managedGroups.Get)
+	api.POST("/me/managed-groups/:gid/members", managerLimiter.LimitBy(callerKey), m.managedGroups.AddMember)
+	api.DELETE("/me/managed-groups/:gid/members/:uid", managerLimiter.LimitBy(callerKey), m.managedGroups.RemoveMember)
 
-	// Users. Read and write are separate feature grants so a support role can be
-	// given visibility without the ability to change anything.
-	adminGrp.GET("/users", middleware.RequireFeature(authRepo, "users:view"), adminH.ListUsers)
-	adminGrp.GET("/users/:id", middleware.RequireFeature(authRepo, "users:view"), adminH.GetUser)
-	adminGrp.PATCH("/users/:id", middleware.RequireFeature(authRepo, "users:edit"), adminH.UpdateUser)
+	// A company's administration, always of the caller's own company. Every
+	// route names the App Central scope it needs: read to look, edit to change.
+	// The scopes come from the caller's groups (the Admins group holds all of
+	// them) and their extras, read from the database on this very request.
+	// Changing who holds what is itself scoped, and the services apply the two
+	// rules on top: nobody gives or takes away a scope they do not hold, and
+	// nobody acts on someone with more access than they have.
+	need := middlewares.RequireScope
+	admin := api.Group("/admin")
+	admin.GET("/users", need(shared.ScopeUsersRead), m.users.List)
+	admin.GET("/users/:id", need(shared.ScopeUsersRead), m.users.Get)
+	admin.PATCH("/users/:id", need(shared.ScopeUsersEdit), m.users.Update)
+	admin.PUT("/users/:id/scopes", need(shared.ScopeUsersEdit), m.users.SetScopes)
+	admin.POST("/users/:id/password-reset", need(shared.ScopeUsersEdit), m.resets.Issue)
+	admin.GET("/invitations", need(shared.ScopeInvitationsRead), m.invitations.List)
+	admin.POST("/invitations", need(shared.ScopeInvitationsEdit), m.invitations.Create)
+	admin.DELETE("/invitations/:id", need(shared.ScopeInvitationsEdit), m.invitations.Revoke)
+	admin.GET("/groups", need(shared.ScopeGroupsRead), m.groups.List)
+	admin.GET("/groups/:id", need(shared.ScopeGroupsRead), m.groups.Get)
+	admin.POST("/groups", need(shared.ScopeGroupsEdit), m.groups.Create)
+	admin.PATCH("/groups/:id", need(shared.ScopeGroupsEdit), m.groups.Update)
+	admin.DELETE("/groups/:id", need(shared.ScopeGroupsEdit), m.groups.Delete)
+	admin.PUT("/groups/:id/scopes", need(shared.ScopeGroupsEdit), m.groups.SetScopes)
+	admin.POST("/groups/:id/members", need(shared.ScopeGroupsEdit), m.members.Add)
+	admin.DELETE("/groups/:id/members/:userId", need(shared.ScopeGroupsEdit), m.members.Remove)
+	admin.POST("/groups/:id/managers", need(shared.ScopeGroupsEdit), m.managers.Appoint)
+	admin.DELETE("/groups/:id/managers/:userId", need(shared.ScopeGroupsEdit), m.managers.Dismiss)
+	admin.GET("/sessions", need(shared.ScopeSessionsRead), m.sessions.List)
+	admin.DELETE("/sessions/:id", need(shared.ScopeSessionsEdit), m.sessions.Revoke)
+	admin.GET("/products", need(shared.ScopeProductsRead), m.products.List)
+	admin.GET("/client", need(shared.ScopeCompanyRead), m.client.Get)
+	admin.PATCH("/client", need(shared.ScopeCompanyEdit), m.client.Update)
+	admin.GET("/api-clients", need(shared.ScopeAPIClientsRead), m.apiClients.List)
+	admin.POST("/api-clients", need(shared.ScopeAPIClientsEdit), m.apiClients.Create)
+	admin.GET("/api-clients/:id", need(shared.ScopeAPIClientsRead), m.apiClients.Get)
+	admin.PATCH("/api-clients/:id", need(shared.ScopeAPIClientsEdit), m.apiClients.Update)
+	admin.DELETE("/api-clients/:id", need(shared.ScopeAPIClientsEdit), m.apiClients.Delete)
+	admin.PUT("/api-clients/:id/scopes", need(shared.ScopeAPIClientsEdit), m.apiClients.SetScopes)
+	admin.PUT("/api-clients/:id/products", need(shared.ScopeAPIClientsEdit), m.apiClients.SetProducts)
+	admin.POST("/api-clients/:id/secrets", need(shared.ScopeAPIClientsEdit), m.apiClients.CreateSecret)
+	admin.DELETE("/api-clients/:id/secrets/:sid", need(shared.ScopeAPIClientsEdit), m.apiClients.RevokeSecret)
 
-	// Permissions are role changes, so they require full admin rather than a
-	// delegated feature key.
-	adminGrp.GET("/users/:id/permissions", middleware.RequireAdmin(), adminH.ListPermissions)
-	adminGrp.PUT("/users/:id/permissions/:productId", middleware.RequireAdmin(), adminH.GrantPermission)
-	adminGrp.DELETE("/users/:id/permissions/:productId", middleware.RequireAdmin(), adminH.RevokePermission)
+	// The Owner console: every company, with a sign-in no older than
+	// OWNER_MAX_AUTH_AGE. A company is named in the path; every write must repeat
+	// it in X-Alora-Target-Company (see owner/controller).
+	own := api.Group("/owner", middlewares.RequireOwner(cfg.Session.OwnerMaxAuthAge))
+	own.GET("/companies", m.owner.ListCompanies)
+	own.POST("/companies", m.owner.CreateCompany)
+	co := own.Group("/companies/:cid")
+	co.GET("", m.owner.GetCompany)
+	co.PATCH("", m.owner.UpdateCompany)
+	co.PUT("/domain", m.owner.SetDomain)
+	co.GET("/subscriptions", m.owner.ListSubscriptions)
+	co.PUT("/subscriptions/:pid", m.owner.SetSubscription)
+	co.GET("/users", m.ownerUsers.List)
+	co.GET("/users/:uid", m.ownerUsers.Get)
+	co.PATCH("/users/:uid", m.ownerUsers.Update)
+	co.PUT("/users/:uid/scopes", m.ownerUsers.SetScopes)
+	co.POST("/users/:uid/password-reset", m.ownerResets.Issue)
+	co.PUT("/users/:uid/login-policy", m.ownerPolicies.AssignUser)
+	co.PUT("/users/:uid/grants/:pid", m.ownerGrants.Grant)
+	co.DELETE("/users/:uid/grants/:pid", m.ownerGrants.Revoke)
+	co.GET("/invitations", m.ownerInvitations.List)
+	co.POST("/invitations", m.ownerInvitations.Create)
+	co.DELETE("/invitations/:iid", m.ownerInvitations.Revoke)
+	co.GET("/groups", m.ownerGroups.List)
+	co.POST("/groups", m.ownerGroups.Create)
+	co.GET("/groups/:gid", m.ownerGroups.Get)
+	co.PATCH("/groups/:gid", m.ownerGroups.Update)
+	co.DELETE("/groups/:gid", m.ownerGroups.Delete)
+	co.PUT("/groups/:gid/scopes", m.ownerGroups.SetScopes)
+	co.PUT("/groups/:gid/product-grants", m.ownerGroups.SetProductGrants)
+	co.PUT("/groups/:gid/login-policy", m.ownerPolicies.AssignGroup)
+	co.POST("/groups/:gid/members", m.ownerMembers.Add)
+	co.DELETE("/groups/:gid/members/:uid", m.ownerMembers.Remove)
+	co.POST("/groups/:gid/managers", m.ownerManagers.Appoint)
+	co.DELETE("/groups/:gid/managers/:uid", m.ownerManagers.Dismiss)
+	co.GET("/login-policies", m.ownerPolicies.List)
+	co.POST("/login-policies", m.ownerPolicies.Create)
+	co.PATCH("/login-policies/:pid", m.ownerPolicies.Update)
+	co.DELETE("/login-policies/:pid", m.ownerPolicies.Delete)
+	co.PUT("/login-policies/:pid/default", m.ownerPolicies.SetDefault)
+	co.GET("/sso-connections", m.ownerSSO.List)
+	co.POST("/sso-connections", m.ownerSSO.Create)
+	co.PATCH("/sso-connections/:sid", m.ownerSSO.Update)
+	co.PUT("/sso-connections/:sid/domains", m.ownerSSO.SetDomains)
+	co.POST("/sso-connections/:sid/test", m.ownerSSO.Test)
+	co.GET("/api-clients", m.ownerAPIClients.List)
+	co.POST("/api-clients", m.ownerAPIClients.Create)
+	co.GET("/api-clients/:aid", m.ownerAPIClients.Get)
+	co.PATCH("/api-clients/:aid", m.ownerAPIClients.Update)
+	co.DELETE("/api-clients/:aid", m.ownerAPIClients.Delete)
+	co.PUT("/api-clients/:aid/scopes", m.ownerAPIClients.SetScopes)
+	co.PUT("/api-clients/:aid/products", m.ownerAPIClients.SetProducts)
+	co.POST("/api-clients/:aid/secrets", m.ownerAPIClients.CreateSecret)
+	co.DELETE("/api-clients/:aid/secrets/:sid", m.ownerAPIClients.RevokeSecret)
+	own.GET("/api-clients", m.ownerAPIClients.ListAll)
+	own.GET("/products", m.owner.ListProducts)
+	own.POST("/products", m.owner.CreateProduct)
+	own.GET("/products/:pid", m.owner.GetProduct)
+	own.PATCH("/products/:pid", m.owner.UpdateProduct)
+	own.PUT("/products/:pid/redirect-uris", m.owner.SetRedirectURIs)
+	own.PUT("/products/:pid/roles", m.owner.SetRoles)
+	own.POST("/products/:pid/client-secret", m.owner.RotateSecret)
 
-	adminGrp.GET("/sessions", middleware.RequireFeature(authRepo, "sessions:view"), adminH.ListSessions)
-	adminGrp.DELETE("/sessions/:id", middleware.RequireFeature(authRepo, "sessions:revoke"), adminH.RevokeSession)
-
-	adminGrp.GET("/products", middleware.RequireFeature(authRepo, "products:view"), adminH.ListProducts)
-	adminGrp.GET("/client", middleware.RequireFeature(authRepo, "client:view"), adminH.GetClient)
-	adminGrp.PATCH("/client", middleware.RequireFeature(authRepo, "client:edit"), adminH.UpdateClient)
-
-	adminGrp.GET("/groups", middleware.RequireFeature(authRepo, "groups:view"), adminH.ListGroups)
-	adminGrp.GET("/groups/:id", middleware.RequireFeature(authRepo, "groups:view"), adminH.GetGroup)
-	adminGrp.POST("/groups", middleware.RequireFeature(authRepo, "groups:manage"), adminH.CreateGroup)
-	adminGrp.PATCH("/groups/:id", middleware.RequireFeature(authRepo, "groups:manage"), adminH.UpdateGroup)
-	adminGrp.DELETE("/groups/:id", middleware.RequireFeature(authRepo, "groups:manage"), adminH.DeleteGroup)
-	adminGrp.POST("/groups/:id/members", middleware.RequireFeature(authRepo, "groups:manage"), adminH.AddMember)
-	adminGrp.DELETE("/groups/:id/members/:userId", middleware.RequireFeature(authRepo, "groups:manage"), adminH.RemoveMember)
+	// API documentation, when enabled. Registered last so a docs route can never
+	// shadow a real one.
+	registerDocs(r, cfg)
 
 	return r, nil
 }
@@ -283,5 +438,12 @@ func emailKey(c *gin.Context) string {
 	if json.Unmarshal(buf, &probe) != nil {
 		return ""
 	}
-	return httpx.NormalizeEmail(probe.Email)
+	return shared.NormalizeEmail(probe.Email)
+}
+
+// basicClientID keys the server-to-server limiter by the client id a product
+// presents, so each product has its own budget however many users it serves.
+// It only reads the header; authentication happens in the handler.
+func basicClientID(c *gin.Context) string {
+	return middlewares.BasicClientID(c.GetHeader("Authorization"))
 }

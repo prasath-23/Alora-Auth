@@ -15,14 +15,24 @@ SELECT * FROM udf_GetPendingInvitation($1);
 -- name: ListInvitations :many
 SELECT * FROM udf_ListInvitations($1);
 
--- name: ListInvitationProducts :many
-SELECT * FROM udf_ListInvitationProducts($1);
+-- name: ListInvitationGroups :many
+SELECT * FROM udf_ListInvitationGroups($1);
+
+-- name: GetInvitationLoginPolicy :one
+SELECT * FROM udf_GetInvitationLoginPolicy($1, $2);
 
 -- name: CreateInvitation :one
-SELECT * FROM stp_CreateInvitation($1, $2, $3, $4, $5);
+SELECT * FROM stp_CreateInvitation(
+    sqlc.arg('email'),
+    sqlc.arg('client_id'),
+    sqlc.narg('invited_by_user_id'),
+    sqlc.narg('invited_by_owner_id'),
+    sqlc.arg('token_hash'),
+    sqlc.arg('expires_at')
+);
 
--- name: CreateInvitationProduct :exec
-CALL stp_CreateInvitationProduct($1, $2, $3);
+-- name: CreateInvitationGroup :exec
+CALL stp_CreateInvitationGroup($1, $2, $3);
 
 -- name: RevokeInvitation :one
 SELECT stp_RevokeInvitation(

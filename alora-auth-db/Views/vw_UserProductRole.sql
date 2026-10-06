@@ -1,7 +1,7 @@
 /****** Object: View [vw_UserProductRole] ******/
--- Active product-role grants. The validity window is part of the view, so an
--- expired grant cannot leak into a JWT roles claim from any caller. Inner
--- join to products is loss-free because the product FK is RESTRICT.
+-- A user's DIRECT product-role grants inside their validity window, with the
+-- product resolved. Effective access, which also counts group grants, is
+-- vw_EffectiveProductRole.
 --
 -- CREATE OR REPLACE so the build is idempotent.
 
@@ -15,5 +15,5 @@ SELECT pp.user_id,
        pp.valid_until
 FROM   tbl_product_permissions pp
 JOIN   tbl_products p ON p.id = pp.product_id
-WHERE  pp.valid_until IS NULL
-   OR  pp.valid_until  > now();
+WHERE  pp.valid_from <= now()
+  AND  (pp.valid_until IS NULL OR pp.valid_until > now());

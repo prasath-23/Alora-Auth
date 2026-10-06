@@ -1,406 +1,245 @@
 package main
 
-// Coverage for invitation onboarding and admin-issued password resets, including
-// the tenant-isolation and single-use guarantees each flow depends on.
+// Onboarding and recovery: invitations into groups, their redemption under the
+// invitee's login policy, and administrator-issued password resets.
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/alora/auth/internal/crypto/jwtkeys"
 )
 
-// adminToken mints a token for the seeded user with a product "Admin" role, which
-// satisfies RequireAdmin via the roles-map VALUE check.
-func (f *fixture) adminToken(t *testing.T, roles map[string]string) string {
+func tokenOf(t *testing.T, link string) string {
 	t.Helper()
-	var pv int32
-	if err := f.pool.QueryRow(context.Background(),
-		`SELECT permissions_version FROM tbl_users WHERE id=$1`, f.userID).Scan(&pv); err != nil {
-		t.Fatal(err)
+	u, err := url.Parse(link)
+	if err != nil || u.Query().Get("token") == "" {
+		t.Fatalf("link %q carries no token", link)
 	}
-	tok, err := jwtkeys.Sign(f.userID, map[string]any{
-		"client_id": f.clientID, "email": f.email, "roles": roles,
-		"pv": int(pv), "is_global_admin": false,
-	}, 15*time.Minute, []string{"alora-auth-api"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return tok
+	return u.Query().Get("token")
 }
 
-func (f *fixture) postAuth(t *testing.T, path string, body any, token string) *httptest.ResponseRecorder {
-	t.Helper()
-	return f.reqAuth(t, http.MethodPost, path, body, token)
+// invite has an Admin of co invite a fresh address into the given groups.
+func (a *app) invite(s session, groups ...string) (email, token string) {
+	a.t.Helper()
+	email = "invitee-" + randSuffix(a.t) + "@acme.test"
+	if groups == nil {
+		groups = []string{}
+	}
+	w := a.post("/api/admin/invitations", map[string]any{"email": email, "group_ids": groups}, bearer(s.Access))
+	expect(a.t, w, http.StatusCreated, "invite")
+	return email, tokenOf(a.t, jsonField(w, "invite_url"))
 }
 
-func (f *fixture) reqAuth(t *testing.T, method, path string, body any, token string) *httptest.ResponseRecorder {
-	t.Helper()
-	var rdr *strings.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
-		rdr = strings.NewReader(string(b))
-	} else {
-		rdr = strings.NewReader("")
-	}
-	req := httptest.NewRequest(method, path, rdr)
-	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	w := httptest.NewRecorder()
-	f.r.ServeHTTP(w, req)
-	return w
-}
+func TestInvitationJoinsItsGroups(t *testing.T) {
+	a := newApp(t)
+	co := a.newCompany()
+	admin := a.newAdmin(co)
+	s := a.login(admin)
+	p := a.newProduct("Viewer")
+	a.subscribe(co, p)
+	g := a.newGroup(co)
+	a.grantGroup(co, g, p, "Viewer")
 
-// ---------- INVITATIONS ----------
-
-func TestInvitationFullLifecycle(t *testing.T) {
-	f := newFlowFixture(t)
-	tok := f.adminToken(t, map[string]string{"CRM": "Admin"})
-	invitee := fmt.Sprintf("newhire-%s@acme.test", randSuffix(t))
-
-	// Create.
-	w := f.postAuth(t, "/admin/invitations", map[string]any{
-		"email":    invitee,
-		"products": []map[string]any{{"product_id": f.product, "role_name": "Viewer"}},
-	}, tok)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create: %d %s", w.Code, w.Body.String())
-	}
-	var created struct {
-		ID        string `json:"id"`
-		InviteURL string `json:"invite_url"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
-		t.Fatal(err)
-	}
-	if created.InviteURL == "" {
-		t.Fatal("invite_url missing (D10a: needed when SMTP is unconfigured)")
-	}
-	// Only the HASH may be stored — never the raw token.
-	rawToken := created.InviteURL[strings.LastIndex(created.InviteURL, "=")+1:]
-	var stored string
-	if err := f.pool.QueryRow(context.Background(),
-		`SELECT token_hash FROM tbl_invitations WHERE id=$1`, created.ID).Scan(&stored); err != nil {
-		t.Fatal(err)
-	}
-	if stored == rawToken {
-		t.Fatal("SECURITY: raw invite token stored in the database")
+	email, tok := a.invite(s, g)
+	// The link opens the page the UI actually serves.
+	router, err := os.ReadFile(filepath.Join("..", "..", "..", "alora-auth-ui", "src", "app", "router.jsx"))
+	if err == nil && !strings.Contains(string(router), "'/accept-invitation'") {
+		t.Error("the UI router has no /accept-invitation route")
 	}
 
-	// Public preview.
-	w = f.reqAuth(t, http.MethodGet, "/auth/accept-invitation/lookup?token="+rawToken, nil, "")
-	if w.Code != http.StatusOK {
-		t.Fatalf("lookup: %d %s", w.Code, w.Body.String())
+	w := a.get("/auth/accept-invitation/lookup?token=" + url.QueryEscape(tok))
+	expect(t, w, http.StatusOK, "lookup")
+	var prev struct {
+		Email      string   `json:"email"`
+		ClientName string   `json:"client_name"`
+		Groups     []string `json:"groups"`
+		Methods    struct {
+			Password bool `json:"password"`
+			Google   bool `json:"google"`
+			SSO      bool `json:"sso"`
+		} `json:"methods"`
 	}
-	var preview struct {
-		Email    string `json:"email"`
-		Products []struct {
-			Role string `json:"role_name"`
-		} `json:"products"`
+	decodeInto(t, w, &prev)
+	if prev.Email != email || prev.ClientName != co.Name || len(prev.Groups) != 1 || !prev.Methods.Password || !prev.Methods.Google || prev.Methods.SSO {
+		t.Fatalf("preview = %s", w.Body.String())
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &preview)
-	if preview.Email != invitee {
-		t.Errorf("preview email = %q, want %q", preview.Email, invitee)
-	}
-	if len(preview.Products) != 1 || preview.Products[0].Role != "Viewer" {
-		t.Errorf("preview products = %+v, want one Viewer grant", preview.Products)
-	}
-
-	// Accept.
-	if w := f.post("/auth/accept-invitation", map[string]any{
-		"token": rawToken, "password": "a-brand-new-password",
-	}); w.Code != http.StatusNoContent {
-		t.Fatalf("accept: %d %s", w.Code, w.Body.String())
+	if strings.Contains(w.Body.String(), "token") {
+		t.Error("SECURITY: the preview echoes a token")
 	}
 
-	// The account exists, in the right tenant, with the invited grant applied.
-	var gotClient, gotRole string
-	if err := f.pool.QueryRow(context.Background(),
-		`SELECT u.client_id, pp.role_name FROM tbl_users u
-		 JOIN tbl_product_permissions pp ON pp.user_id = u.id
-		 WHERE lower(u.email)=$1`, strings.ToLower(invitee)).Scan(&gotClient, &gotRole); err != nil {
-		t.Fatalf("created user/grant not found: %v", err)
+	expect(t, a.post("/auth/accept-invitation", map[string]any{"token": tok, "password": testPassword}), http.StatusNoContent, "accept")
+	newbie := a.login(member{Email: email, Password: testPassword})
+	apps := a.get("/api/me/apps", bearer(newbie.Access))
+	if !strings.Contains(apps.Body.String(), p.ID) {
+		t.Errorf("the invitee did not get the group's product: %s", apps.Body.String())
 	}
-	if gotClient != f.clientID || gotRole != "Viewer" {
-		t.Errorf("client=%s role=%s, want %s/Viewer", gotClient, gotRole, f.clientID)
-	}
-
-	// Single-use: the token must not work twice.
-	if w := f.post("/auth/accept-invitation", map[string]any{
-		"token": rawToken, "password": "another-password",
-	}); w.Code == http.StatusNoContent {
-		t.Error("SECURITY: invitation token was redeemable twice")
+	// Single use.
+	expect(t, a.post("/auth/accept-invitation", map[string]any{"token": tok, "password": testPassword}), http.StatusBadRequest, "accept twice")
+	expect(t, a.get("/auth/accept-invitation/lookup?token="+url.QueryEscape(tok)), http.StatusBadRequest, "lookup after use")
+	// Only the hash is stored.
+	if n := a.count(`SELECT count(*) FROM tbl_invitations WHERE token_hash = $1`, tok); n != 0 {
+		t.Error("SECURITY: an invitation token is stored in the clear")
 	}
 }
 
-func TestInvitationRequiresAdminAndIsTenantScoped(t *testing.T) {
-	f := newFlowFixture(t)
+func TestInvitationRules(t *testing.T) {
+	a := newApp(t)
+	co := a.newCompany()
+	s := a.login(a.newAdmin(co))
+	existing := a.newMember(co, "")
+	foreignGroup := a.newGroup(a.newCompany())
 
-	// A non-admin role must not be able to invite.
-	viewer := f.adminToken(t, map[string]string{"CRM": "Viewer"})
-	if w := f.postAuth(t, "/admin/invitations",
-		map[string]any{"email": "x@acme.test"}, viewer); w.Code != http.StatusForbidden {
-		t.Errorf("viewer create: %d, want 403", w.Code)
-	}
-	// Unauthenticated.
-	if w := f.post("/admin/invitations", map[string]any{"email": "x@acme.test"}); w.Code != http.StatusUnauthorized {
-		t.Errorf("anon create: %d, want 401", w.Code)
-	}
+	expect(t, a.post("/api/admin/invitations", map[string]any{"email": existing.Email}, bearer(s.Access)), http.StatusConflict, "an existing member")
+	email, _ := a.invite(s)
+	expect(t, a.post("/api/admin/invitations", map[string]any{"email": email}, bearer(s.Access)), http.StatusConflict, "a pending invitation")
+	expect(t, a.post("/api/admin/invitations", map[string]any{"email": "x-" + randSuffix(t) + "@acme.test", "group_ids": []string{foreignGroup}}, bearer(s.Access)),
+		http.StatusBadRequest, "another company's group")
+	expect(t, a.post("/api/admin/invitations", map[string]any{"email": "x@acme.test", "client_id": co.ID}, bearer(s.Access)),
+		http.StatusBadRequest, "a client_id field")
 
-	// An admin of ANOTHER tenant must not revoke this tenant's invitation.
-	tok := f.adminToken(t, map[string]string{"CRM": "Admin"})
-	w := f.postAuth(t, "/admin/invitations",
-		map[string]any{"email": fmt.Sprintf("v-%s@acme.test", randSuffix(t))}, tok)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	// Revocation, scoped to the company.
+	w := a.get("/api/admin/invitations", bearer(s.Access))
+	expect(t, w, http.StatusOK, "list")
+	var list []struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
 	}
-	var created struct {
-		ID string `json:"id"`
-	}
-	_ = json.Unmarshal(w.Body.Bytes(), &created)
-
-	other := newFlowFixture(t) // a separate tenant + admin
-	otherTok := other.adminToken(t, map[string]string{"CRM": "Admin"})
-	if w := other.reqAuth(t, http.MethodDelete, "/admin/invitations/"+created.ID, nil, otherTok); w.Code != http.StatusNotFound {
-		t.Errorf("SECURITY: cross-tenant revoke returned %d, want 404", w.Code)
-	}
-	// Still pending for its real owner.
-	var status string
-	if err := f.pool.QueryRow(context.Background(),
-		`SELECT status FROM tbl_invitations WHERE id=$1`, created.ID).Scan(&status); err != nil {
-		t.Fatal(err)
-	}
-	if status != "PENDING" {
-		t.Errorf("SECURITY: cross-tenant revoke mutated the invitation (status=%s)", status)
-	}
-
-	// The owner can revoke it.
-	if w := f.reqAuth(t, http.MethodDelete, "/admin/invitations/"+created.ID, nil, tok); w.Code != http.StatusNoContent {
-		t.Errorf("owner revoke: %d, want 204", w.Code)
-	}
-	// A revoked invite must no longer be listed as pending, nor be acceptable.
-	if w := f.reqAuth(t, http.MethodDelete, "/admin/invitations/"+created.ID, nil, tok); w.Code != http.StatusNotFound {
-		t.Errorf("double revoke: %d, want 404", w.Code)
-	}
-}
-
-func TestInvitationRejectsDuplicateAndExistingUser(t *testing.T) {
-	f := newFlowFixture(t)
-	tok := f.adminToken(t, map[string]string{"CRM": "Admin"})
-
-	// Inviting an address that is already an active member.
-	if w := f.postAuth(t, "/admin/invitations", map[string]any{"email": f.email}, tok); w.Code != http.StatusConflict {
-		t.Errorf("existing user: %d, want 409 (%s)", w.Code, w.Body.String())
-	}
-
-	// Two live invites for the same address must not coexist.
-	dup := fmt.Sprintf("dup-%s@acme.test", randSuffix(t))
-	if w := f.postAuth(t, "/admin/invitations", map[string]any{"email": dup}, tok); w.Code != http.StatusCreated {
-		t.Fatalf("first invite: %d %s", w.Code, w.Body.String())
-	}
-	if w := f.postAuth(t, "/admin/invitations", map[string]any{"email": dup}, tok); w.Code != http.StatusConflict {
-		t.Errorf("duplicate invite: %d, want 409", w.Code)
-	}
-}
-
-func TestInvitationLookupAndAcceptRejectBadTokens(t *testing.T) {
-	f := newFlowFixture(t)
-	for _, tc := range []struct{ name, token string }{
-		{"unknown", strings.Repeat("f", 64)},
-		{"empty", ""},
-	} {
-		t.Run("lookup/"+tc.name, func(t *testing.T) {
-			w := f.reqAuth(t, http.MethodGet, "/auth/accept-invitation/lookup?token="+tc.token, nil, "")
-			if w.Code != http.StatusBadRequest {
-				t.Errorf("status %d, want 400", w.Code)
-			}
-		})
-		t.Run("accept/"+tc.name, func(t *testing.T) {
-			w := f.post("/auth/accept-invitation", map[string]any{"token": tc.token, "password": "long-enough-password"})
-			if w.Code == http.StatusNoContent {
-				t.Error("SECURITY: bad token accepted")
-			}
-		})
-	}
-	// Weak password must be refused by validation.
-	if w := f.post("/auth/accept-invitation", map[string]any{
-		"token": strings.Repeat("a", 64), "password": "short",
-	}); w.Code != http.StatusBadRequest {
-		t.Errorf("weak password: %d, want 400", w.Code)
-	}
-}
-
-// An invite issued before the tenant was suspended must stop working.
-func TestInvitationBlockedForInactiveTenant(t *testing.T) {
-	f := newFlowFixture(t)
-	tok := f.adminToken(t, map[string]string{"CRM": "Admin"})
-	w := f.postAuth(t, "/admin/invitations",
-		map[string]any{"email": fmt.Sprintf("late-%s@acme.test", randSuffix(t))}, tok)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create: %d %s", w.Code, w.Body.String())
-	}
-	var created struct {
-		InviteURL string `json:"invite_url"`
-	}
-	_ = json.Unmarshal(w.Body.Bytes(), &created)
-	raw := created.InviteURL[strings.LastIndex(created.InviteURL, "=")+1:]
-
-	if _, err := f.pool.Exec(context.Background(),
-		`UPDATE tbl_clients SET is_active=false WHERE id=$1`, f.clientID); err != nil {
-		t.Fatal(err)
-	}
-	if w := f.reqAuth(t, http.MethodGet, "/auth/accept-invitation/lookup?token="+raw, nil, ""); w.Code == http.StatusOK {
-		t.Error("SECURITY: suspended tenant still previews invitations")
-	}
-}
-
-// ---------- PASSWORD RESET ----------
-
-func TestPasswordResetFullLifecycle(t *testing.T) {
-	f := newFlowFixture(t)
-	// passwords:reset is granted through a group, exercising RequireFeature.
-	tok := f.grantFeatureToken(t, "passwords:reset")
-
-	w := f.postAuth(t, "/admin/users/"+f.userID+"/password-reset", nil, tok)
-	if w.Code != http.StatusOK {
-		t.Fatalf("issue: %d %s", w.Code, w.Body.String())
-	}
-	var issued struct {
-		ResetURL string `json:"reset_url"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &issued); err != nil || issued.ResetURL == "" {
-		t.Fatalf("no reset_url in %s", w.Body.String())
-	}
-	raw := issued.ResetURL[strings.LastIndex(issued.ResetURL, "=")+1:]
-
-	// Give the user a live session, which the reset must destroy.
-	code := f.getCode(t)
-	lw := f.post("/auth/token", map[string]any{"code": code, "code_verifier": f.verifier})
-	rt := cookieNamed(lw, "alora_rt")
-	if rt == nil {
-		t.Fatal("no session cookie")
-	}
-
-	newPass := "a-completely-new-password"
-	if w := f.post("/auth/reset-password", map[string]any{"token": raw, "new_password": newPass}); w.Code != http.StatusNoContent {
-		t.Fatalf("consume: %d %s", w.Code, w.Body.String())
-	}
-
-	// Old password dead, new password works.
-	old := f.authorizeBody()
-	if w := f.post("/auth/authorize", old); w.Code != http.StatusUnauthorized {
-		t.Errorf("old password still works: %d", w.Code)
-	}
-	f.pass = newPass
-	if w := f.post("/auth/authorize", f.authorizeBody()); w.Code != http.StatusOK {
-		t.Errorf("new password rejected: %d %s", w.Code, w.Body.String())
-	}
-
-	// Every prior session must be revoked (LOGOUT_ALL).
-	if w := f.post("/auth/refresh", nil, rt); w.Code != http.StatusUnauthorized {
-		t.Errorf("SECURITY: session survived a password reset: %d", w.Code)
-	}
-
-	// Single-use.
-	if w := f.post("/auth/reset-password", map[string]any{"token": raw, "new_password": "yet-another-password"}); w.Code == http.StatusNoContent {
-		t.Error("SECURITY: reset token was redeemable twice")
-	}
-}
-
-// grantFeatureToken creates a group carrying the given feature keys, adds the
-// seeded user to it, and returns a token with NO product roles — so
-// authorization can only succeed through the group-membership path.
-//
-// Note that view and manage are deliberately distinct keys (matching the Fastify
-// contract): holding groups:manage does NOT imply groups:view, so a caller that
-// needs both must be granted both, exactly as the admin UI does.
-func (f *fixture) grantFeatureToken(t *testing.T, featureKeys ...string) string {
-	t.Helper()
-	ctx := context.Background()
-	var groupID string
-	if err := f.pool.QueryRow(ctx,
-		`INSERT INTO tbl_groups (client_id, name) VALUES ($1,$2) RETURNING id`,
-		f.clientID, "grp-"+randSuffix(t)).Scan(&groupID); err != nil {
-		t.Fatal(err)
-	}
-	for _, k := range featureKeys {
-		if _, err := f.pool.Exec(ctx,
-			`INSERT INTO tbl_group_features (group_id, feature_key) VALUES ($1,$2)`, groupID, k); err != nil {
-			t.Fatal(err)
+	decodeInto(t, w, &list)
+	var id string
+	for _, i := range list {
+		if i.Email == email {
+			id = i.ID
 		}
 	}
-	if _, err := f.pool.Exec(ctx,
-		`INSERT INTO tbl_user_groups (user_id, group_id, client_id) VALUES ($1,$2,$3)`,
-		f.userID, groupID, f.clientID); err != nil {
-		t.Fatal(err)
+	if id == "" || strings.Contains(w.Body.String(), "token") {
+		t.Fatalf("list = %s", w.Body.String())
 	}
-	return f.adminToken(t, map[string]string{})
-}
+	other := a.login(a.newAdmin(a.newCompany()))
+	expect(t, a.send(http.MethodDelete, "/api/admin/invitations/"+id, nil, bearer(other.Access)), http.StatusNotFound, "another company revoking")
+	expect(t, a.send(http.MethodDelete, "/api/admin/invitations/"+id, nil, bearer(s.Access)), http.StatusNoContent, "revoke")
+	expect(t, a.send(http.MethodDelete, "/api/admin/invitations/"+id, nil, bearer(s.Access)), http.StatusNotFound, "revoke twice")
 
-func TestPasswordResetRequiresFeatureAndTenantScope(t *testing.T) {
-	f := newFlowFixture(t)
-
-	// No feature, no product role → 403.
-	plain := f.adminToken(t, map[string]string{})
-	if w := f.postAuth(t, "/admin/users/"+f.userID+"/password-reset", nil, plain); w.Code != http.StatusForbidden {
-		t.Errorf("no feature: %d, want 403", w.Code)
-	}
-	// Unauthenticated → 401.
-	if w := f.post("/admin/users/"+f.userID+"/password-reset", nil); w.Code != http.StatusUnauthorized {
-		t.Errorf("anon: %d, want 401", w.Code)
-	}
-
-	// Cross-tenant: a properly-entitled admin must not reset another tenant's user.
-	other := newFlowFixture(t)
-	otherTok := other.grantFeatureToken(t, "passwords:reset")
-	if w := other.postAuth(t, "/admin/users/"+f.userID+"/password-reset", nil, otherTok); w.Code != http.StatusNotFound {
-		t.Errorf("SECURITY: cross-tenant reset returned %d, want 404", w.Code)
-	}
-}
-
-func TestPasswordResetRejectsBadTokensUniformly(t *testing.T) {
-	f := newFlowFixture(t)
-	var bodies []string
-	for _, tok := range []string{strings.Repeat("z", 43), "short"} {
-		w := f.post("/auth/reset-password", map[string]any{"token": tok, "new_password": "a-valid-long-password"})
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("token %q: %d, want 400", tok, w.Code)
+	// Unknown, junk and oversized tokens all look alike.
+	for _, tok := range []string{"nope", strings.Repeat("z", 64), strings.Repeat("z", 300)} {
+		w := a.get("/auth/accept-invitation/lookup?token=" + tok)
+		if w.Code != http.StatusBadRequest || jsonField(w, "error") != "Invitation not found, expired, or already used" {
+			t.Errorf("lookup %.10q: %d %s", tok, w.Code, w.Body.String())
 		}
-		bodies = append(bodies, w.Body.String())
-	}
-	// Unknown vs malformed must be indistinguishable (no token oracle).
-	if len(bodies) == 2 && !sameErrorMessage(bodies[0], bodies[1]) {
-		t.Errorf("SECURITY: reset token oracle — %q vs %q", bodies[0], bodies[1])
 	}
 }
 
-// A reset link issued before deactivation must not revive the account.
-func TestPasswordResetBlockedForDeactivatedUser(t *testing.T) {
-	f := newFlowFixture(t)
-	tok := f.grantFeatureToken(t, "passwords:reset")
-	w := f.postAuth(t, "/admin/users/"+f.userID+"/password-reset", nil, tok)
-	if w.Code != http.StatusOK {
-		t.Fatalf("issue: %d %s", w.Code, w.Body.String())
-	}
-	var issued struct {
-		ResetURL string `json:"reset_url"`
-	}
-	_ = json.Unmarshal(w.Body.Bytes(), &issued)
-	raw := issued.ResetURL[strings.LastIndex(issued.ResetURL, "=")+1:]
+// How an invitee may accept follows the login policy they will have.
+func TestInvitationAcceptanceFollowsThePolicy(t *testing.T) {
+	a := newApp(t)
+	os := a.login(a.newOwner())
+	co := a.newCompany()
+	s := a.login(a.newAdmin(co))
+	// A group whose members sign in with Google only.
+	g := a.newGroup(co)
+	gp := a.newPolicy(os, co, "Google", false, true, 30)
+	expect(t, a.ownerCall(os, http.MethodPut, "/api/owner/companies/"+co.ID+"/groups/"+g+"/login-policy", co.ID,
+		map[string]any{"policy_id": gp}), http.StatusNoContent, "group policy")
 
-	if _, err := f.pool.Exec(context.Background(),
-		`UPDATE tbl_users SET is_active=false WHERE id=$1`, f.userID); err != nil {
-		t.Fatal(err)
+	email, tok := a.invite(s, g)
+	var prev struct {
+		Methods map[string]bool `json:"methods"`
 	}
-	if w := f.post("/auth/reset-password", map[string]any{"token": raw, "new_password": "new-password-here"}); w.Code == http.StatusNoContent {
-		t.Error("SECURITY: reset succeeded for a deactivated user")
+	decodeInto(t, a.get("/auth/accept-invitation/lookup?token="+url.QueryEscape(tok)), &prev)
+	if prev.Methods["password"] || !prev.Methods["google"] {
+		t.Fatalf("methods = %v, want Google only", prev.Methods)
+	}
+	expect(t, a.post("/auth/accept-invitation", map[string]any{"token": tok, "password": testPassword}), http.StatusBadRequest, "a password under a Google-only policy")
+	expect(t, a.post("/auth/accept-invitation/federated", map[string]any{"token": tok}), http.StatusNoContent, "federated")
+	var accountType string
+	a.scalar(&accountType, `SELECT account_type::text FROM tbl_users WHERE email = $1 AND client_id = $2`, email, co.ID)
+	if accountType != "OAUTH_ONLY" {
+		t.Errorf("account type %s, want OAUTH_ONLY", accountType)
+	}
+
+	// The default policy (password and Google) allows either.
+	_, tok2 := a.invite(s)
+	expect(t, a.post("/auth/accept-invitation/federated", map[string]any{"token": tok2}), http.StatusNoContent, "federated under the default")
+	// A password-only default refuses the passwordless route.
+	var def string
+	a.scalar(&def, `SELECT id FROM tbl_login_policies WHERE client_id = $1 AND is_default`, co.ID)
+	a.exec(`UPDATE tbl_login_policies SET allow_google = false WHERE id = $1`, def)
+	_, tok3 := a.invite(s)
+	expect(t, a.post("/auth/accept-invitation/federated", map[string]any{"token": tok3}), http.StatusBadRequest, "passwordless under a password-only policy")
+	expect(t, a.post("/auth/accept-invitation", map[string]any{"token": tok3, "password": "short"}), http.StatusBadRequest, "a too-short password")
+}
+
+func TestPasswordResetEndsEverySession(t *testing.T) {
+	a := newApp(t)
+	l := a.setupProduct("Viewer")
+	f := newFlow(t)
+	ts := a.exchange(l.p, a.code(&l, f), f)
+	admin := a.login(a.newAdmin(l.co))
+
+	w := a.post("/api/admin/users/"+l.m.ID+"/password-reset", nil, bearer(admin.Access))
+	expect(t, w, http.StatusOK, "issue")
+	tok := tokenOf(t, jsonField(w, "reset_url"))
+	if w.Header().Get("Cache-Control") != "no-store" {
+		t.Error("the reset link response is cacheable")
+	}
+	// Re-issuing kills the earlier link.
+	w2 := a.post("/api/admin/users/"+l.m.ID+"/password-reset", nil, bearer(admin.Access))
+	tok2 := tokenOf(t, jsonField(w2, "reset_url"))
+	expect(t, a.post("/auth/reset-password", map[string]any{"token": tok, "new_password": "a new long password"}), http.StatusBadRequest, "the superseded link")
+
+	expect(t, a.post("/auth/reset-password", map[string]any{"token": tok2, "new_password": "a new long password"}), http.StatusNoContent, "reset")
+	expect(t, a.get("/api/me", bearer(l.s.Access)), http.StatusUnauthorized, "the App Central session after the reset")
+	if w := a.productRefresh(l.p, ts.RefreshToken); oauthError(t, w) != "invalid_grant" {
+		t.Errorf("SECURITY: a product login survived the reset: %s", w.Body.String())
+	}
+	expect(t, a.post("/auth/login/password", map[string]any{"email": l.m.Email, "password": testPassword}), http.StatusUnauthorized, "the old password")
+	a.login(member{Email: l.m.Email, Password: "a new long password"})
+	expect(t, a.post("/auth/reset-password", map[string]any{"token": tok2, "new_password": "another long password"}), http.StatusBadRequest, "the link twice")
+
+	// Another company's user is not found; a malformed body says nothing more.
+	stranger := a.newMember(a.newCompany(), "")
+	expect(t, a.post("/api/admin/users/"+stranger.ID+"/password-reset", nil, bearer(admin.Access)), http.StatusNotFound, "another company's user")
+	w = a.post("/auth/reset-password", map[string]any{"token": "x", "new_password": "short", "extra": 1})
+	if w.Code != http.StatusBadRequest || jsonField(w, "error") != "Invalid or expired reset token" {
+		t.Errorf("malformed reset: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// A reset link cannot revive a deactivated account.
+func TestResetCannotReviveADeactivatedUser(t *testing.T) {
+	a := newApp(t)
+	co := a.newCompany()
+	m := a.newMember(co, "")
+	admin := a.login(a.newAdmin(co))
+	tok := tokenOf(t, jsonField(a.post("/api/admin/users/"+m.ID+"/password-reset", nil, bearer(admin.Access)), "reset_url"))
+	a.exec(`UPDATE tbl_users SET is_active = false WHERE id = $1`, m.ID)
+	expect(t, a.post("/auth/reset-password", map[string]any{"token": tok, "new_password": "a new long password"}), http.StatusBadRequest, "reset a deactivated user")
+}
+
+// In production, with no mail configured, a reset link is never handed back.
+func TestResetLinkIsNeverReturnedInProduction(t *testing.T) {
+	a := newAppWith(t, map[string]string{
+		"NODE_ENV": "production", "JWT_ISSUER": testIssuer, "FRONTEND_URL": testFrontend,
+		"GOOGLE_REDIRECT_URI": testFrontend + "/auth/google/callback",
+	}, nil)
+	co := a.newCompany()
+	m := a.newMember(co, "")
+	admin := a.newAdmin(co)
+	// Production cookies carry the __Host- prefix.
+	w := a.post("/auth/login/password", map[string]any{"email": admin.Email, "password": admin.Password})
+	expect(t, w, http.StatusOK, "login")
+	ck := cookieNamed(w, "__Host-alora_cs")
+	if ck == nil || !ck.Secure || ck.Domain != "" || ck.Path != "/" || !ck.HttpOnly {
+		t.Fatalf("production session cookie = %+v", ck)
+	}
+	w = a.post("/api/admin/users/"+m.ID+"/password-reset", nil, bearer(jsonField(w, "access_token")))
+	expect(t, w, http.StatusServiceUnavailable, "reset without mail in production")
+	if strings.Contains(w.Body.String(), "reset-password") {
+		t.Fatal("SECURITY: a reset link was returned in production")
+	}
+	if h := a.get("/health").Header().Get("Strict-Transport-Security"); h == "" {
+		t.Error("no HSTS in production")
 	}
 }

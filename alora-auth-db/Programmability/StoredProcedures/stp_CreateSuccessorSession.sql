@@ -1,10 +1,11 @@
 /****** Object: Stored Procedure [stp_CreateSuccessorSession] ******/
 -- Appends the next generation to an existing family. The family id is
--- inherited, never regenerated — that is what keeps a stolen token traceable
--- to every other token derived from the same login. prev_token_hash is what
--- makes the grace-window race detectable. A collision on (family_id,
--- generation) means a concurrent rotation won, and the unique index turns
--- that into 23505 rather than a forked family.
+-- inherited, never regenerated -- that is what keeps a stolen token
+-- traceable to every other token derived from the same login.
+-- prev_token_hash is what makes the grace-window race detectable. A
+-- collision on (family_id, generation) means a concurrent rotation won, and
+-- the unique index turns that into 23505 rather than a forked family. The
+-- expiry never outlives the family's absolute cap.
 --
 -- Implemented as a FUNCTION, not a PROCEDURE: the caller needs the result,
 -- and PostgreSQL procedures cannot return a result set.
@@ -19,8 +20,10 @@ AS $$
     INSERT INTO tbl_user_sessions (user_id, client_id, session_uuid, family_id, generation,
                                    refresh_token_hash, prev_token_hash, expires_at,
                                    ip_address, device_label, user_agent)
-    VALUES (p_userId, p_clientId, p_sessionUuid, p_familyId, p_generation,
-            p_refreshTokenHash, p_prevTokenHash, p_expiresAt,
-            p_ipAddress, p_deviceLabel, p_userAgent)
+    SELECT p_userId, p_clientId, p_sessionUuid, p_familyId, p_generation,
+           p_refreshTokenHash, p_prevTokenHash, LEAST(p_expiresAt, f.absolute_expires_at),
+           p_ipAddress, p_deviceLabel, p_userAgent
+    FROM   tbl_session_families f
+    WHERE  f.id = p_familyId
     RETURNING *;
 $$;

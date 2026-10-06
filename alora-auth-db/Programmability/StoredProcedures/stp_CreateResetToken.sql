@@ -1,6 +1,6 @@
 /****** Object: Stored Procedure [stp_CreateResetToken] ******/
 -- Mints a reset token, stored as its hash only. The caller deletes any
--- outstanding token first so exactly one link is ever live — otherwise
+-- outstanding token first so exactly one link is ever live -- otherwise
 -- re-issuing would leave an earlier, possibly leaked link redeemable.
 --
 -- Implemented as a FUNCTION, not a PROCEDURE: the caller needs the result,

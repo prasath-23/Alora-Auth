@@ -1,227 +1,386 @@
 import { test, expect } from '@playwright/test'
-import { createHash, randomBytes } from 'node:crypto'
-import { seedTenant, query, suffix } from './seed.js'
+import { seedCompany, suffix } from './seed.js'
+import { freePort, startProduct } from './product.js'
+import { apiClient, bearer, newMember, pathOf, signIn, signedIn, tokenFor } from './helpers.js'
 
-// These specs drive the real browser against the real Go/Gin API and a real
-// Postgres. Nothing is mocked, so any contract mismatch between the SPA and the
-// backend fails HERE — which is the whole point during a backend replacement.
-//
-// THE REAL LOGIN SHAPE. `/` is an OAuth2 authorization endpoint, not a
-// self-contained login page: a product app sends the user there with PKCE
-// parameters, the SPA posts the credentials, and the browser is redirected back
-// to the product carrying a one-time code. These tests play the product app's
-// part, which is why they build a PKCE pair and exchange the code themselves.
+// App Central sign-in, and the launch of a product that has its own backend
+// (sample-product.cjs): the whole two-step token journey in a real browser.
 
-const base64url = buf => buf.toString('base64url')
+const INVALID = 'Invalid email or password.'
 
-function pkcePair() {
-  const verifier = base64url(randomBytes(48))
-  const challenge = base64url(createHash('sha256').update(verifier).digest())
-  return { verifier, challenge }
-}
+test.describe('signing in at App Central', () => {
+  let t
 
-/** Builds the authorize URL a product app would send the user to. */
-function authorizeURL({ productId, redirectUrl, challenge, state }) {
-  const p = new URLSearchParams({
-    product_id: productId,
-    redirect_url: redirectUrl,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    state,
-  })
-  return `/?${p}`
-}
-
-/**
- * Runs the complete login: fills the form, follows the redirect back to the
- * "product", then exchanges the code for tokens. page.request shares the
- * browser's cookie jar, so the session cookies land in the page context exactly
- * as they would for a real product app on the same origin.
- */
-async function login(page, tenant, { password = tenant.password } = {}) {
-  const { verifier, challenge } = pkcePair()
-  const redirectUrl = 'http://127.0.0.1:5173/'
-  const state = `st-${suffix()}`
-
-  await page.goto(authorizeURL({ productId: tenant.productId, redirectUrl, challenge, state }))
-  await page.locator('#email').fill(tenant.email)
-  await page.locator('#password').fill(password)
-  await page.getByRole('button', { name: /sign in/i }).click()
-
-  // The SPA redirects to the product with ?code=... on success.
-  await page.waitForURL(/[?&]code=/, { timeout: 15_000 })
-  const code = new URL(page.url()).searchParams.get('code')
-  expect(code, 'authorization code should be present in the redirect').toBeTruthy()
-  expect(new URL(page.url()).searchParams.get('state'), 'state must round-trip').toBe(state)
-
-  const res = await page.request.post('/auth/token', {
-    data: { code, code_verifier: verifier, redirect_url: redirectUrl },
-  })
-  expect(res.status(), 'token exchange should succeed').toBe(200)
-  return { body: await res.json(), verifier, code, redirectUrl }
-}
-
-test.describe('login (OAuth2 + PKCE)', () => {
-  test('issues a code, exchanges it for tokens, and establishes a session', async ({ page }) => {
-    const t = seedTenant()
-    const { body } = await login(page, t)
-
-    expect(body.token_type).toBe('Bearer')
-    expect(body.expires_in).toBe(900)
-    expect(body.access_token).toBeTruthy()
-
-    // The refresh cookie must exist and be invisible to JavaScript.
-    const rt = (await page.context().cookies()).find(c => c.name === 'alora_rt')
-    expect(rt, 'refresh cookie should be set').toBeTruthy()
-    expect(rt.httpOnly, 'refresh cookie must be HttpOnly').toBe(true)
-    expect(await page.evaluate(() => document.cookie)).not.toContain('alora_rt')
-
-    // With the session established, the admin SPA bootstraps via silent refresh.
-    await page.goto('/admin')
-    await expect(page).toHaveURL(/\/admin/)
-    await expect(page.locator('body')).not.toContainText(/sign in through your product/i)
+  test.beforeAll(() => {
+    t = seedCompany({ productPort: 9 }) // no product process: nothing here launches it
   })
 
-  test('rejects a wrong password without leaking which field was wrong', async ({ page }) => {
-    const t = seedTenant()
-    const { challenge } = pkcePair()
-
-    await page.goto(authorizeURL({
-      productId: t.productId, redirectUrl: 'http://127.0.0.1:5173/',
-      challenge, state: 'st-bad',
-    }))
-    await page.locator('#email').fill(t.email)
-    await page.locator('#password').fill('definitely-the-wrong-password')
-    await page.getByRole('button', { name: /sign in/i }).click()
-
-    await expect(page.getByText(/invalid email or password/i)).toBeVisible()
-    // No code was issued and no session cookie was set.
-    expect(page.url()).not.toMatch(/[?&]code=/)
-    expect((await page.context().cookies()).find(c => c.name === 'alora_rt')).toBeFalsy()
+  test('a password sign-in lands on the launcher with the apps the user may open', async ({ page }) => {
+    await signedIn(page, t.email, t.password)
+    expect(pathOf(page)).toBe('/')
+    await expect(page.getByTestId('me-company')).toHaveText(t.company)
+    const app = page.getByTestId(`app-${t.productKey}`)
+    await expect(app).toBeVisible()
+    await expect(app).toContainText('Admin') // the role this user holds in it
+    await expect(page.getByRole('link', { name: 'Admin' })).toBeVisible()
   })
 
-  test('rejects an unknown email with the SAME message (no enumeration)', async ({ page }) => {
-    const t = seedTenant()
-    const { challenge } = pkcePair()
-
-    await page.goto(authorizeURL({
-      productId: t.productId, redirectUrl: 'http://127.0.0.1:5173/',
-      challenge, state: 'st-unknown',
-    }))
-    await page.locator('#email').fill(`nobody-${suffix()}@nowhere.test`)
-    await page.locator('#password').fill(t.password)
-    await page.getByRole('button', { name: /sign in/i }).click()
-
-    await expect(page.getByText(/invalid email or password/i)).toBeVisible()
-  })
-
-  test('refuses to render the form without valid PKCE parameters', async ({ page }) => {
+  test('a wrong password gets the generic error and starts no session', async ({ page, context }) => {
+    await signIn(page, t.email, 'not-the-password')
+    await expect(page.getByRole('alert')).toHaveText(INVALID)
+    expect((await context.cookies()).map(c => c.name)).not.toContain('alora_cs')
     await page.goto('/')
-    await expect(page.getByText(/missing required parameter/i)).toBeVisible()
-
-    const t = seedTenant()
-    const { challenge } = pkcePair()
-    // Only S256 is acceptable; `plain` offers no protection.
-    await page.goto(`/?product_id=${t.productId}&redirect_url=http://127.0.0.1:5173/&code_challenge=${challenge}&code_challenge_method=plain&state=s`)
-    await expect(page.getByText(/unsupported code_challenge_method/i)).toBeVisible()
+    await expect(page).toHaveURL(/\/login$/)
   })
 
-  test('a code cannot be exchanged twice', async ({ page }) => {
-    const t = seedTenant()
-    const { code, verifier, redirectUrl } = await login(page, t)
-
-    const replay = await page.request.post('/auth/token', {
-      data: { code, code_verifier: verifier, redirect_url: redirectUrl },
-    })
-    expect(replay.status(), 'replayed code must be rejected').not.toBe(200)
+  test('an address with no account gets exactly the same answer', async ({ page }) => {
+    await signIn(page, `nobody-${suffix()}@e2e.test`, 'some-password-1')
+    await expect(page.getByRole('alert')).toHaveText(INVALID)
   })
 
-  test('a code cannot be exchanged with the wrong PKCE verifier', async ({ page }) => {
-    const t = seedTenant()
-    const { challenge } = pkcePair()
-    const redirectUrl = 'http://127.0.0.1:5173/'
+  test('the session lives only in an HttpOnly, host-only cookie — never in script-readable storage', async ({ page, context }) => {
+    await signedIn(page, t.email, t.password)
+    const cs = (await context.cookies()).find(c => c.name === 'alora_cs')
+    expect(cs, 'the session cookie is set').toBeTruthy()
+    expect(cs.httpOnly).toBe(true)
+    expect(cs.sameSite).toBe('Lax')
+    expect(cs.domain, 'host-only: no Domain attribute').toBe('localhost')
+    expect(await page.evaluate(() => document.cookie)).not.toContain('alora_cs')
+    const storage = await page.evaluate(() => JSON.stringify([{ ...localStorage }, { ...sessionStorage }]))
+    expect(storage, 'no token in web storage').not.toMatch(/eyJ/)
 
-    await page.goto(authorizeURL({ productId: t.productId, redirectUrl, challenge, state: 'st-pkce' }))
-    await page.locator('#email').fill(t.email)
-    await page.locator('#password').fill(t.password)
-    await page.getByRole('button', { name: /sign in/i }).click()
-    await page.waitForURL(/[?&]code=/, { timeout: 15_000 })
+    // A reload has no token to read: it refreshes the cookie and carries on.
+    await page.reload()
+    await expect(page.getByTestId('me-email')).toHaveText(t.email)
+  })
 
-    const code = new URL(page.url()).searchParams.get('code')
-    const res = await page.request.post('/auth/token', {
-      data: { code, code_verifier: base64url(randomBytes(48)), redirect_url: redirectUrl },
+  test('signing out ends the session: a reload goes to the login page', async ({ page }) => {
+    await signedIn(page, t.email, t.password)
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole('status')).toHaveText('You have signed out.')
+    await page.goto('/profile')
+    await expect(page).toHaveURL(/\/login\?return_to=%2Fprofile$/)
+  })
+
+  // Every page load rotates the session cookie. Leaving a page while that
+  // rotation is in flight must not strand the browser on the superseded
+  // cookie — which the server would then, rightly, treat as a replay.
+  test('leaving pages while their session refresh is in flight keeps the session', async ({ page }) => {
+    await signedIn(page, t.email, t.password)
+    for (let i = 0; i < 6; i++) {
+      const sent = page.waitForRequest(r => r.url().endsWith('/auth/central/refresh'))
+      await page.goto(i % 2 ? '/' : '/profile', { waitUntil: 'commit' })
+      await sent
+      await page.goto('/', { waitUntil: 'commit' }) // away before it answers
+    }
+    await expect(page.getByTestId('me-email')).toHaveText(t.email)
+    await page.reload()
+    await expect(page.getByTestId('me-email')).toHaveText(t.email)
+  })
+
+  // Only a 401 ends a session. A server that is overloaded or failing says
+  // nothing about the session, so it must never sign anybody out.
+  test('a server that cannot answer a refresh signs nobody out', async ({ page }) => {
+    await signedIn(page, t.email, t.password)
+    // (Persistent, not one-shot: React's development mode fetches twice.)
+    await page.route('**/api/me/apps', r => r.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Unauthorized"}' }))
+    await page.route('**/auth/central/refresh', r => r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Service Unavailable"}' }))
+
+    // Re-open the launcher: its call "expires", and every refresh answers 503.
+    await page.getByRole('link', { name: 'Profile' }).click()
+    await page.getByRole('link', { name: 'Apps', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('not answering')
+    await expect(page.getByTestId('me-email')).toHaveText(t.email)
+    expect(new URL(page.url()).pathname).toBe('/')
+
+    // The server recovers: the session was never lost.
+    await page.unroute('**/auth/central/refresh')
+    await page.unroute('**/api/me/apps')
+    await page.reload()
+    await expect(page.getByTestId('me-email')).toHaveText(t.email)
+  })
+
+  test('a page that needs a session comes back after sign-in', async ({ page }) => {
+    await page.goto('/profile')
+    await expect(page).toHaveURL(/\/login\?return_to=%2Fprofile$/)
+    await signIn(page, t.email, t.password, { path: null })
+    await expect(page).toHaveURL(/\/profile$/)
+    await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
+  })
+
+  // Each of these resolves, in a browser, to somewhere other than App Central
+  // (a backslash reads as a slash; a tab is stripped before parsing).
+  for (const evil of ['https://evil.example/', '//evil.example/', '/\\evil.example/', '/\t/evil.example/', 'javascript:alert(1)']) {
+    test(`a return_to of ${evil} is never followed`, async ({ page }) => {
+      await page.goto(`/login?return_to=${encodeURIComponent(evil)}`)
+      await signIn(page, t.email, t.password, { path: null })
+      await expect(page.getByTestId('me-email')).toHaveText(t.email)
+      const u = new URL(page.url())
+      expect(u.host).toBe('localhost:5173')
+      expect(u.pathname).toBe('/')
     })
-    expect(res.status(), 'a stolen code alone must be useless').not.toBe(200)
+  }
+})
+
+test.describe('one address with accounts in two companies', () => {
+  test('the company is chosen only after the password is proven', async ({ page }) => {
+    const email = `both-${suffix()}@e2e.test`
+    const a = seedCompany({ email, productPort: 9 })
+    const b = seedCompany({ email, productPort: 9 })
+
+    await signIn(page, email, a.password)
+    await expect(page.getByRole('heading', { name: 'Choose a company' })).toBeVisible()
+    const list = page.getByRole('list', { name: 'Companies' })
+    await expect(list.getByRole('button')).toHaveCount(2)
+    await list.getByRole('button', { name: b.company }).click()
+    await expect(page.getByTestId('me-company')).toHaveText(b.company)
+  })
+
+  test('a wrong password reveals no company', async ({ page }) => {
+    const email = `both-${suffix()}@e2e.test`
+    seedCompany({ email, productPort: 9 })
+    seedCompany({ email, productPort: 9 })
+
+    await signIn(page, email, 'not-the-password')
+    await expect(page.getByRole('alert')).toHaveText(INVALID)
+    await expect(page.getByRole('heading', { name: 'Choose a company' })).toHaveCount(0)
   })
 })
 
-test.describe('admin portal', () => {
-  test('redirects an unauthenticated visitor away from the admin area', async ({ page }) => {
-    await page.goto('/admin/users')
-    // ProtectedRoute sends unauthenticated users to the informational login page.
-    await expect(page.getByText(/sign in through your product/i)).toBeVisible({ timeout: 15_000 })
+test.describe('launching a product', () => {
+  let t
+  let product
+
+  test.beforeAll(async () => {
+    t = seedCompany({ productPort: await freePort() })
+    product = await startProduct(t)
+  })
+  test.afterAll(() => product?.stop())
+
+  test('opens the product signed in, with no login page, and the product verifies its own token', async ({ page }) => {
+    await signedIn(page, t.email, t.password)
+    const shown = []
+    page.on('framenavigated', f => { if (f === page.mainFrame()) shown.push(new URL(f.url())) })
+
+    await page.getByRole('link', { name: `Open ${t.productName}` }).click()
+    await page.waitForURL(`${product.origin}/`)
+
+    await expect(page.getByTestId('who')).toHaveText(t.email)
+    await expect(page.getByTestId('roles')).toHaveText('Admin')
+    await expect(page.getByTestId('aud')).toHaveText(`product:${t.productKey}`)
+    await expect(page.getByTestId('tenant')).toHaveText(t.companyId)
+    await expect(page.getByTestId('id-aud')).toHaveText(t.productId)
+    expect(shown.filter(u => u.pathname === '/login'), 'no login page on the way').toEqual([])
   })
 
-  test('lists the tenant\'s users', async ({ page }) => {
-    const t = seedTenant()
-    await login(page, t)
+  test('the product renews its token, and App Central sign-out stops that renewal', async ({ page }) => {
+    await signedIn(page, t.email, t.password)
+    await page.getByRole('link', { name: `Open ${t.productName}` }).click()
+    await page.waitForURL(`${product.origin}/`)
 
-    await page.goto('/admin/users')
-    // .first() because the address legitimately appears twice: once in the layout
-    // header (we are signed in AS this user) and once in the list row. Playwright
-    // strict mode rejects an ambiguous locator, and asserting on the first visible
-    // occurrence is what the test actually cares about.
-    await expect(page.getByText(t.email).first()).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Renew token' }).click()
+    await expect(page.getByTestId('renewals')).toHaveText('1')
+    await page.getByRole('button', { name: 'Renew token' }).click()
+    await expect(page.getByTestId('renewals')).toHaveText('2')
+
+    // Sign out of App Central: every product login opened under it ends too.
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await expect(page).toHaveURL(/\/login$/)
+
+    await page.goto(`${product.origin}/`)
+    await page.getByRole('button', { name: 'Renew token' }).click()
+    await expect(page.getByTestId('product-error')).toHaveText('invalid_grant')
+    await expect(page.getByTestId('signed-out')).toBeVisible()
   })
 
-  test('creates an invitation and stores only its hash', async ({ page }) => {
-    const t = seedTenant()
-    const { body } = await login(page, t)
-    const invitee = `invitee-${suffix()}@e2e.test`
+  test('signing in at the product without a session goes through App Central and resumes', async ({ page }) => {
+    await page.goto(`${product.origin}/`)
+    await expect(page.getByTestId('signed-out')).toBeVisible()
+    await page.getByRole('link', { name: 'Sign in with Alora' }).click()
 
-    // Exercised through the API with the browser's own token: the invite UI
-    // varies, but the contract the SPA depends on is what must hold.
-    const res = await page.request.post('/admin/invitations', {
-      headers: { Authorization: `Bearer ${body.access_token}` },
-      data: { email: invitee },
-    })
-    expect(res.status()).toBe(201)
-    const created = await res.json()
-    expect(created.invite_url, 'invite_url is required when SMTP is unconfigured').toBeTruthy()
+    await expect(page).toHaveURL(/localhost:5173\/login\?return_to=%2Foauth%2Fauthorize%3F/)
+    await signIn(page, t.email, t.password, { path: null })
 
-    // The raw token must never be persisted — only its SHA-256.
-    const rawToken = created.invite_url.split('=').pop()
-    const stored = query(
-      `SELECT token_hash FROM tbl_invitations WHERE lower(email)='${invitee.toLowerCase()}'`)
-    expect(stored).toHaveLength(64)
-    expect(stored).not.toBe(rawToken)
+    await page.waitForURL(`${product.origin}/`)
+    await expect(page.getByTestId('who')).toHaveText(t.email)
+  })
 
-    // And it shows up in the list the UI renders.
+  test('signing out of the product revokes only its own login', async ({ page }) => {
+    await signedIn(page, t.email, t.password)
+    await page.getByRole('link', { name: `Open ${t.productName}` }).click()
+    await page.waitForURL(`${product.origin}/`)
+
+    await page.getByRole('button', { name: 'Sign out of this product' }).click()
+    await expect(page.getByTestId('signed-out')).toBeVisible()
+
+    // App Central is still signed in, and launching again is silent.
+    await page.goto('/')
+    await expect(page.getByTestId('me-email')).toHaveText(t.email)
+    await page.getByRole('link', { name: `Open ${t.productName}` }).click()
+    await page.waitForURL(`${product.origin}/`)
+    await expect(page.getByTestId('who')).toHaveText(t.email)
+  })
+
+  test('a user with no access to the product is refused it, and is told so by the product', async ({ page }) => {
+    const member = await newMember(t) // in the company, in no group: no apps
+    await signedIn(page, member.email, member.password)
+    await expect(page.getByText("You don't have access to any app yet.")).toBeVisible()
+
+    // The product asks anyway: App Central answers the product with an error,
+    // never with a code.
+    await page.goto(`${product.origin}/login`)
+    await expect(page.getByTestId('product-error')).toHaveText('access_denied')
+    expect(new URL(page.url()).pathname).toBe('/callback')
+  })
+
+  test('a launch naming another issuer is refused by the product', async ({ page }) => {
+    await page.goto(`${product.origin}/login/initiate?iss=${encodeURIComponent('https://evil.example')}&target_link_uri=${encodeURIComponent(product.origin + '/')}`)
+    await expect(page.getByTestId('product-error')).toHaveText('invalid_issuer')
+  })
+})
+
+test.describe('a member without admin rights', () => {
+  test('sees no Admin area, and the API refuses the admin endpoints', async ({ page }) => {
+    const t = seedCompany({ productPort: 9 })
+    const member = await newMember(t)
+
+    await signedIn(page, member.email, member.password)
+    await expect(page.getByRole('link', { name: 'Admin', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Owner', exact: true })).toHaveCount(0)
+    await page.goto('/admin/users')
+    await expect(page.getByTestId('not-allowed')).toBeVisible()
+    await page.goto('/owner')
+    await expect(page.getByTestId('not-allowed')).toBeVisible()
+
+    const api = await apiClient()
+    const token = await tokenFor(api, member.email, member.password)
+    expect((await api.get('/api/admin/users', bearer(token))).status()).toBe(403)
+    expect((await api.get('/api/owner/companies', bearer(token))).status()).toBe(403)
+    expect((await api.get('/api/me', bearer(token))).status()).toBe(200)
+    await api.dispose()
+  })
+})
+
+test.describe('invitations and password resets', () => {
+  let t
+
+  test.beforeAll(() => {
+    t = seedCompany({ productPort: 9 })
+  })
+
+  test('an Admin invites someone, who sets a password and signs in', async ({ page, browser }) => {
+    await signedIn(page, t.email, t.password)
+    await page.getByRole('link', { name: 'Admin', exact: true }).click()
+    await page.getByRole('link', { name: 'Invitations' }).click()
+
+    const email = `invitee-${suffix()}@e2e.test`
+    await page.locator('#invite-email').fill(email)
+    await page.getByRole('button', { name: 'Send invitation' }).click()
+    const link = page.getByTestId('invite-url')
+    await expect(link).toBeVisible()
+    const inviteURL = await link.getAttribute('href')
+    await expect(page.getByTestId('invitation-row').filter({ hasText: email })).toContainText('PENDING')
+
+    const other = await browser.newContext()
+    const invitee = await other.newPage()
+    await invitee.goto(inviteURL)
+    await expect(invitee.getByText(t.company)).toBeVisible()
+    await invitee.locator('#password').fill('a-brand-new-passphrase')
+    await invitee.locator('#password2').fill('a-brand-new-passphrase')
+    await invitee.getByRole('button', { name: 'Create account' }).click()
+    await expect(invitee.getByRole('status')).toContainText('Your account is ready')
+
+    await invitee.getByRole('link', { name: 'Go to sign-in →' }).click()
+    await signIn(invitee, email, 'a-brand-new-passphrase', { path: null })
+    await expect(invitee.getByTestId('me-email')).toHaveText(email)
+
+    // The link was single-use.
+    await invitee.goto(inviteURL)
+    await expect(invitee.getByText('This invitation is invalid, expired or already used.', { exact: false })).toBeVisible()
+    await other.close()
+  })
+
+  test('a revoked invitation no longer opens', async ({ page, browser }) => {
+    await signedIn(page, t.email, t.password)
     await page.goto('/admin/invitations')
-    await expect(page.getByText(invitee)).toBeVisible({ timeout: 15_000 })
+    const email = `revoked-${suffix()}@e2e.test`
+    await page.locator('#invite-email').fill(email)
+    await page.getByRole('button', { name: 'Send invitation' }).click()
+    const inviteURL = await page.getByTestId('invite-url').getAttribute('href')
+    const row = page.getByTestId('invitation-row').filter({ hasText: email })
+    await row.getByRole('button', { name: 'Revoke' }).click()
+    await expect(row).toContainText('REVOKED')
+
+    const other = await browser.newContext()
+    const p = await other.newPage()
+    await p.goto(inviteURL)
+    await expect(p.getByText('This invitation is invalid, expired or already used.', { exact: false })).toBeVisible()
+    await other.close()
   })
 
-  test('session list never exposes token material', async ({ page }) => {
-    const t = seedTenant()
-    const { body } = await login(page, t)
+  test('an Admin issues a reset link; the new password works and the old one no longer does', async ({ page, browser }) => {
+    const member = await newMember(t)
+    await signedIn(page, t.email, t.password)
+    await page.goto('/admin/users')
+    await page.getByRole('searchbox', { name: 'Search users' }).fill(member.email)
+    await page.getByRole('button', { name: 'Search' }).click()
+    const row = page.getByTestId('user-row').filter({ hasText: member.email })
+    await expect(row).toHaveCount(1)
+    await row.getByRole('button', { name: 'Reset password' }).click()
+    const resetURL = await page.getByTestId('reset-url').getAttribute('href')
 
-    const res = await page.request.get('/admin/sessions', {
-      headers: { Authorization: `Bearer ${body.access_token}` },
-    })
-    expect(res.status()).toBe(200)
-    const text = await res.text()
-    for (const leak of ['refresh_token_hash', 'prev_token_hash', 'revoked_reason', 'user_id']) {
-      expect(text, `session list must not expose ${leak}`).not.toContain(leak)
-    }
+    const other = await browser.newContext()
+    const p = await other.newPage()
+    await p.goto(resetURL)
+    await p.locator('#new-password').fill('the-reset-passphrase')
+    await p.locator('#confirm-password').fill('the-reset-passphrase')
+    await p.getByRole('button', { name: 'Update password' }).click()
+    await expect(p.getByRole('heading', { name: 'Password updated' })).toBeVisible()
+
+    await signIn(p, member.email, member.password)
+    await expect(p.getByRole('alert')).toHaveText(INVALID)
+    await signIn(p, member.email, 'the-reset-passphrase')
+    await expect(p.getByTestId('me-email')).toHaveText(member.email)
+
+    // The reset link was single-use.
+    await p.goto(resetURL)
+    await p.locator('#new-password').fill('yet-another-passphrase')
+    await p.locator('#confirm-password').fill('yet-another-passphrase')
+    await p.getByRole('button', { name: 'Update password' }).click()
+    await expect(p.getByRole('alert')).toBeVisible()
+    await other.close()
   })
 
-  test('logging out kills the session', async ({ page }) => {
-    const t = seedTenant()
-    await login(page, t)
+  test('changing your own password signs you out everywhere', async ({ page }) => {
+    const member = await newMember(t)
+    await signedIn(page, member.email, member.password)
+    await page.goto('/profile')
+    await page.locator('#current-password').fill(member.password)
+    await page.locator('#new-password').fill('changed-passphrase-1')
+    await page.locator('#confirm-password').fill('changed-passphrase-1')
+    await page.getByRole('button', { name: 'Change password' }).click()
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole('status')).toContainText('Your password was changed')
 
-    expect((await page.request.post('/auth/refresh')).status()).toBe(200)
-    expect((await page.request.post('/auth/logout')).status()).toBe(204)
-    // The rotated cookie is now revoked, so a further refresh must fail.
-    expect((await page.request.post('/auth/refresh')).status()).toBe(401)
+    await signIn(page, member.email, 'changed-passphrase-1', { path: null })
+    await expect(page.getByTestId('me-email')).toHaveText(member.email)
+  })
+
+  test('a wrong current password changes nothing', async ({ page }) => {
+    const member = await newMember(t)
+    await signedIn(page, member.email, member.password)
+    await page.goto('/profile')
+    await page.locator('#current-password').fill('not-my-password')
+    await page.locator('#new-password').fill('changed-passphrase-2')
+    await page.locator('#confirm-password').fill('changed-passphrase-2')
+    await page.getByRole('button', { name: 'Change password' }).click()
+    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(page).toHaveURL(/\/profile$/)
+
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await signIn(page, member.email, member.password, { path: null })
+    await expect(page.getByTestId('me-email')).toHaveText(member.email)
   })
 })

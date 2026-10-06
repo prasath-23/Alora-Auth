@@ -34,9 +34,12 @@ DO $$ BEGIN
 END $$;
 
 -- Unique constraints and indexes.
+--
+-- Also the target of the composite keys that tie grants and product sessions
+-- to a subscription.
 CREATE UNIQUE INDEX IF NOT EXISTS UQ_tbl_client_products_client_product
     ON tbl_client_products (client_id, product_id);
 --
--- Serves the entitlement check on every login.
+-- Serves the entitlement check on every launch.
 CREATE INDEX IF NOT EXISTS IX_tbl_client_products_client_active
     ON tbl_client_products (client_id, is_active);

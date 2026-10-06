@@ -1,5 +1,9 @@
 # JUSTIFICATION.md — Construct-Level Audit, Alora Auth Go
 
+> **Paths below predate the restructure** into `internal/{database,infrastructure,exceptions,middlewares,core}`; ARCHITECTURE.md §2 maps each old package to where it now lives.
+>
+> **This audit also predates App Central (schema v2).** It knows nothing of the two-step tokens, session families, the platform Owner, group-granted products, login policies or company SSO, and several variables it discusses (`COOKIE_DOMAIN`, `JWT_API_AUDIENCE`, `JWT_REFRESH_EXPIRES_DAYS`, `RATE_LIMIT_AUTHORIZE_EMAIL_MAX`) no longer exist. It is kept as the record of why the foundations look the way they do. For the current design, `../SPEC.md` and `ARCHITECTURE.md` win wherever the two disagree.
+
 ## 1. Executive Summary
 
 | Metric | Value |

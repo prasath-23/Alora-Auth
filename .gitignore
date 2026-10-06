@@ -31,8 +31,19 @@ Thumbs.db
 .idea/
 .vscode/
 
+# ── AI agents: personal, never shared ───────────────────────────────────────
+# AGENTS.md, CLAUDE.md, .claude/agents/ and .claude/rules/ are tracked; these
+# hold one person's permissions and notes.
+.claude/settings.local.json
+CLAUDE.local.md
+
 # ── Logs ────────────────────────────────────────────────────────────────────
 *.log
 
-# NOTE: sqlc-generated code under alora-auth-api/internal/platform/database/sqlc
-# IS tracked, so a fresh clone builds without running codegen.
+# ── Pinned code generators ──────────────────────────────────────────────────
+# alora-auth-go/scripts/generate.sh installs buf and the protoc plugins here.
+alora-auth-go/.bin/
+
+# NOTE: sqlc-generated code under alora-auth-api/internal/database/sqlc
+# IS tracked, so a fresh clone builds without running codegen. So is the gRPC
+# code under alora-auth-go/authpb, so products can `go get` it.

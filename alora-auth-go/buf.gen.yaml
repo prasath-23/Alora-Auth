@@ -1,0 +1,11 @@
+# Generates authpb/ from proto/ with LOCAL plugins at pinned versions
+# (scripts/generate.sh installs them into .bin). Output goes where each file's
+# go_package says, relative to this module.
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt: module=github.com/prasath-23/Alora-Auth/alora-auth-go
+  - local: protoc-gen-go-grpc
+    out: .
+    opt: module=github.com/prasath-23/Alora-Auth/alora-auth-go

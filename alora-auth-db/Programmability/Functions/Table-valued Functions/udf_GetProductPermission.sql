@@ -1,5 +1,5 @@
 /****** Object: Table-valued Function [udf_GetProductPermission] ******/
--- A single grant, for existence checks.
+-- A single direct grant, for existence checks.
 --
 -- CREATE OR REPLACE so the build is idempotent.
 
