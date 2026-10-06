@@ -31,6 +31,12 @@ Thumbs.db
 .idea/
 .vscode/
 
+# ── AI agents: personal, never shared ───────────────────────────────────────
+# AGENTS.md, CLAUDE.md, .claude/agents/ and .claude/rules/ are tracked; these
+# hold one person's permissions and notes.
+.claude/settings.local.json
+CLAUDE.local.md
+
 # ── Logs ────────────────────────────────────────────────────────────────────
 *.log
 
