@@ -1,0 +1,5186 @@
+basePath: /
+definitions:
+  APIClient:
+    properties:
+      company_id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+      company_name:
+        example: Acme Corp
+        type: string
+      created_at:
+        type: string
+      description:
+        example: Copies orders to the warehouse
+        type: string
+      id:
+        example: aci_1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      last_used_at:
+        type: string
+      live_secrets:
+        example: 1
+        type: integer
+      name:
+        example: Nightly sync
+        type: string
+      products:
+        items:
+          $ref: '#/definitions/APIClientProduct'
+        type: array
+      scopes:
+        example:
+        - api:read
+        - grpc:read
+        items:
+          type: string
+        type: array
+      updated_at:
+        type: string
+    type: object
+  APIClientDetail:
+    properties:
+      company_id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+      company_name:
+        example: Acme Corp
+        type: string
+      created_at:
+        type: string
+      description:
+        example: Copies orders to the warehouse
+        type: string
+      id:
+        example: aci_1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      last_used_at:
+        type: string
+      live_secrets:
+        example: 1
+        type: integer
+      name:
+        example: Nightly sync
+        type: string
+      product_choices:
+        items:
+          $ref: '#/definitions/APIClientProduct'
+        type: array
+      products:
+        items:
+          $ref: '#/definitions/APIClientProduct'
+        type: array
+      scopes:
+        example:
+        - api:read
+        - grpc:read
+        items:
+          type: string
+        type: array
+      secrets:
+        items:
+          $ref: '#/definitions/APIClientSecret'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  APIClientProduct:
+    properties:
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      product_key:
+        example: CRM
+        type: string
+      product_name:
+        example: Acme CRM
+        type: string
+      usable:
+        example: true
+        type: boolean
+    type: object
+  APIClientProductsResponse:
+    properties:
+      products:
+        items:
+          $ref: '#/definitions/APIClientProduct'
+        type: array
+    type: object
+  APIClientScopesResponse:
+    properties:
+      scopes:
+        example:
+        - api:read
+        - grpc:read
+        items:
+          type: string
+        type: array
+    type: object
+  APIClientSecret:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+      is_live:
+        example: true
+        type: boolean
+      last_used_at:
+        type: string
+      prefix:
+        example: acc_Xy12Ab34
+        type: string
+      revoked_at:
+        type: string
+    type: object
+  AcceptInvitationFederatedRequest:
+    properties:
+      token:
+        example: 6f1c8a0e9d2b4f7a3c5e8b1d0a9f2c4e
+        maxLength: 256
+        minLength: 10
+        type: string
+    required:
+    - token
+    type: object
+  AcceptInvitationRequest:
+    properties:
+      password:
+        example: correct-horse-battery-staple
+        maxLength: 512
+        minLength: 8
+        type: string
+      token:
+        example: 6f1c8a0e9d2b4f7a3c5e8b1d0a9f2c4e
+        maxLength: 256
+        type: string
+    required:
+    - password
+    - token
+    type: object
+  AddMemberRequest:
+    properties:
+      email:
+        example: member@acme.com
+        maxLength: 320
+        type: string
+      user_id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+    type: object
+  AddMemberResponse:
+    properties:
+      group_id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      user_id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+    type: object
+  App:
+    properties:
+      description:
+        type: string
+      key:
+        example: CRM
+        type: string
+      launch_url:
+        example: https://crm.acme.com/login/initiate?iss=https%3A%2F%2Fcentral.alora.io&target_link_uri=https%3A%2F%2Fcrm.acme.com%2F
+        type: string
+      name:
+        example: Acme CRM
+        type: string
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      roles:
+        example:
+        - Editor
+        items:
+          type: string
+        type: array
+    type: object
+  AppointGroupManagerRequest:
+    properties:
+      email:
+        example: lead@acme.com
+        maxLength: 320
+        type: string
+      user_id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+    type: object
+  AssignLoginPolicyRequest:
+    properties:
+      policy_id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+    type: object
+  CentralTokenResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJSUzI1NiIsImtpZCI6ImsxIiwidHlwIjoiYXQrand0In0...
+        type: string
+      expires_in:
+        example: 900
+        type: integer
+      token_type:
+        example: Bearer
+        type: string
+    type: object
+  ChangePasswordRequest:
+    properties:
+      current_password:
+        example: correct-horse-battery-staple
+        maxLength: 512
+        minLength: 1
+        type: string
+      new_password:
+        example: a-different-long-passphrase
+        maxLength: 512
+        minLength: 8
+        type: string
+    required:
+    - current_password
+    - new_password
+    type: object
+  ChooseCompanyRequest:
+    properties:
+      client_id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+    required:
+    - client_id
+    type: object
+  ClientDetail:
+    properties:
+      created_at:
+        type: string
+      domain:
+        example: acme.com
+        type: string
+      domain_verified_at:
+        type: string
+      id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      is_platform:
+        example: false
+        type: boolean
+      max_seats:
+        example: 100
+        type: integer
+      name:
+        example: Acme Corp
+        type: string
+      subscription_status:
+        enum:
+        - TRIAL
+        - ACTIVE
+        - SUSPENDED
+        - CANCELLED
+        example: ACTIVE
+        type: string
+      updated_at:
+        type: string
+    type: object
+  Company:
+    properties:
+      created_at:
+        type: string
+      domain:
+        example: acme.com
+        type: string
+      domain_verified_at:
+        type: string
+      id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      is_platform:
+        example: false
+        type: boolean
+      max_seats:
+        example: 100
+        type: integer
+      name:
+        example: Acme Corp
+        type: string
+      subscription_status:
+        enum:
+        - TRIAL
+        - ACTIVE
+        - SUSPENDED
+        - CANCELLED
+        example: ACTIVE
+        type: string
+      updated_at:
+        type: string
+      user_count:
+        example: 42
+        type: integer
+    type: object
+  CompanyChoice:
+    properties:
+      client_id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+      name:
+        example: Acme Corp
+        type: string
+    type: object
+  CompanyChoices:
+    properties:
+      companies:
+        items:
+          $ref: '#/definitions/CompanyChoice'
+        type: array
+    type: object
+  CreateAPIClientRequest:
+    properties:
+      description:
+        example: Copies orders to the warehouse
+        maxLength: 500
+        type: string
+      name:
+        example: Nightly sync
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  CreateAPIClientSecretRequest:
+    properties:
+      expires_in_days:
+        example: 90
+        maximum: 730
+        minimum: 1
+        type: integer
+    type: object
+  CreateCompanyRequest:
+    properties:
+      domain:
+        example: acme.com
+        maxLength: 253
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      max_seats:
+        example: 100
+        minimum: 1
+        type: integer
+      name:
+        example: Acme Corp
+        maxLength: 200
+        minLength: 1
+        type: string
+      subscription_status:
+        enum:
+        - TRIAL
+        - ACTIVE
+        - SUSPENDED
+        - CANCELLED
+        example: ACTIVE
+        type: string
+    required:
+    - name
+    type: object
+  CreateGroupRequest:
+    properties:
+      description:
+        example: Helpdesk staff
+        maxLength: 500
+        type: string
+      name:
+        example: Support
+        maxLength: 100
+        minLength: 1
+        type: string
+      product_grants:
+        items:
+          $ref: '#/definitions/GroupProductGrantRequest'
+        type: array
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        maxItems: 50
+        type: array
+    required:
+    - name
+    type: object
+  CreateInvitationRequest:
+    properties:
+      email:
+        example: newhire@acme.com
+        maxLength: 320
+        type: string
+      group_ids:
+        example:
+        - 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        items:
+          type: string
+        maxItems: 20
+        type: array
+    required:
+    - email
+    type: object
+  CreateInvitationResponse:
+    properties:
+      email:
+        example: newhire@acme.com
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 8c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
+        type: string
+      invite_url:
+        example: http://localhost:5173/accept-invitation?token=6f1c8a0e
+        type: string
+    type: object
+  CreateProductRequest:
+    properties:
+      accepts_api_clients:
+        example: false
+        type: boolean
+      base_url:
+        example: https://crm.acme.com
+        maxLength: 2048
+        type: string
+      description:
+        example: Customer relationships
+        maxLength: 1000
+        type: string
+      initiate_login_uri:
+        example: https://crm.acme.com/login/initiate
+        maxLength: 2048
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      key:
+        example: CRM
+        maxLength: 40
+        minLength: 2
+        type: string
+      name:
+        example: Acme CRM
+        maxLength: 200
+        minLength: 1
+        type: string
+    required:
+    - key
+    - name
+    type: object
+  ErrorResponse:
+    properties:
+      error:
+        example: Invalid request
+        type: string
+      reqId:
+        example: 0b7c0f1e-6a19-4f3f-9a2d-1f9d0f3a6c21
+        type: string
+    type: object
+  GrantRoleRequest:
+    properties:
+      role_name:
+        example: Editor
+        maxLength: 64
+        type: string
+    required:
+    - role_name
+    type: object
+  GroupDetail:
+    properties:
+      created_at:
+        type: string
+      description:
+        example: Helpdesk staff
+        type: string
+      id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      login_policy_id:
+        type: string
+      login_policy_name:
+        example: SSO only
+        type: string
+      managers:
+        items:
+          $ref: '#/definitions/GroupManager'
+        type: array
+      member_count:
+        example: 4
+        type: integer
+      members:
+        items:
+          $ref: '#/definitions/GroupMember'
+        type: array
+      name:
+        example: Support
+        type: string
+      product_grants:
+        items:
+          $ref: '#/definitions/GroupProductGrant'
+        type: array
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        type: array
+      system_key:
+        example: ADMINS
+        type: string
+    type: object
+  GroupListItem:
+    properties:
+      created_at:
+        type: string
+      description:
+        example: Helpdesk staff
+        type: string
+      id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      login_policy_id:
+        type: string
+      member_count:
+        example: 4
+        type: integer
+      name:
+        example: Support
+        type: string
+      product_grants:
+        items:
+          $ref: '#/definitions/GroupProductGrant'
+        type: array
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        type: array
+      system_key:
+        example: ADMINS
+        type: string
+    type: object
+  GroupManager:
+    properties:
+      appointed_at:
+        type: string
+      appointed_by_email:
+        example: admin@acme.com
+        type: string
+      appointed_by_owner:
+        example: false
+        type: boolean
+      email:
+        example: lead@acme.com
+        type: string
+      user_id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+    type: object
+  GroupManagerAppointment:
+    properties:
+      group_id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      user_id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+    type: object
+  GroupMember:
+    properties:
+      assigned_at:
+        type: string
+      email:
+        example: member@acme.com
+        type: string
+      user_id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+    type: object
+  GroupProductGrant:
+    properties:
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      product_key:
+        example: CRM
+        type: string
+      role_name:
+        example: Viewer
+        type: string
+    type: object
+  GroupProductGrantRequest:
+    properties:
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      role_name:
+        example: Viewer
+        maxLength: 64
+        type: string
+    required:
+    - product_id
+    - role_name
+    type: object
+  GroupResponse:
+    properties:
+      id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      name:
+        example: Support
+        type: string
+      product_grants:
+        items:
+          $ref: '#/definitions/GroupProductGrant'
+        type: array
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        type: array
+    type: object
+  GroupScopesResponse:
+    properties:
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        type: array
+    type: object
+  HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  IntrospectionResponse:
+    properties:
+      active:
+        example: true
+        type: boolean
+      aud:
+        example: product:CRM
+        type: string
+      client_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      email:
+        example: alice@acme.com
+        type: string
+      exp:
+        example: 1767225600
+        type: integer
+      iat:
+        example: 1767224700
+        type: integer
+      iss:
+        example: https://central.alora.io
+        type: string
+      principal:
+        enum:
+        - user
+        - client
+        example: user
+        type: string
+      roles:
+        example:
+        - Admin
+        items:
+          type: string
+        type: array
+      scope:
+        example: api:read grpc:read
+        type: string
+      sid:
+        example: 7e8f9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b
+        type: string
+      sub:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+      tenant_id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+    type: object
+  InvitationListItem:
+    properties:
+      created_at:
+        type: string
+      email:
+        example: newhire@acme.com
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 8c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
+        type: string
+      status:
+        enum:
+        - PENDING
+        - ACCEPTED
+        - EXPIRED
+        - REVOKED
+        example: PENDING
+        type: string
+    type: object
+  InvitationMethods:
+    properties:
+      google:
+        example: false
+        type: boolean
+      password:
+        example: true
+        type: boolean
+      sso:
+        example: false
+        type: boolean
+    type: object
+  InvitationPreview:
+    properties:
+      client_name:
+        example: Acme Corp
+        type: string
+      email:
+        example: newhire@acme.com
+        type: string
+      expires_at:
+        type: string
+      groups:
+        example:
+        - Support
+        items:
+          type: string
+        type: array
+      methods:
+        $ref: '#/definitions/InvitationMethods'
+    type: object
+  IssueResetResponse:
+    properties:
+      expires_at:
+        type: string
+      reset_url:
+        example: http://localhost:5173/reset-password?token=c4e8b1d0
+        type: string
+    type: object
+  JWKS:
+    properties:
+      keys:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+    type: object
+  LoginDiscoverRequest:
+    properties:
+      email:
+        example: alice@acme.com
+        maxLength: 320
+        type: string
+    required:
+    - email
+    type: object
+  LoginDiscoverResponse:
+    properties:
+      google:
+        example: true
+        type: boolean
+      password:
+        example: true
+        type: boolean
+      sso:
+        $ref: '#/definitions/LoginDiscoverSSO'
+    type: object
+  LoginDiscoverSSO:
+    properties:
+      connection_id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+    type: object
+  LoginPolicy:
+    properties:
+      allow_google:
+        example: true
+        type: boolean
+      allow_password:
+        example: true
+        type: boolean
+      created_at:
+        type: string
+      id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+      is_default:
+        example: false
+        type: boolean
+      name:
+        example: Contractors
+        type: string
+      priority:
+        example: 10
+        type: integer
+      sso_connection_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  LoginPolicyRequest:
+    properties:
+      allow_google:
+        example: false
+        type: boolean
+      allow_password:
+        example: false
+        type: boolean
+      name:
+        example: Contractors
+        maxLength: 100
+        minLength: 1
+        type: string
+      priority:
+        example: 10
+        maximum: 1000
+        minimum: -1000
+        type: integer
+      sso_connection_id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+    required:
+    - allow_google
+    - allow_password
+    - name
+    - priority
+    type: object
+  LoginResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJSUzI1NiIsImtpZCI6ImsxIiwidHlwIjoiYXQrand0In0...
+        type: string
+      companies:
+        items:
+          $ref: '#/definitions/CompanyChoice'
+        type: array
+      expires_in:
+        example: 900
+        type: integer
+      return_to:
+        example: /oauth/authorize?client_id=...
+        type: string
+      status:
+        enum:
+        - authenticated
+        - choose_company
+        example: authenticated
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+    type: object
+  ManagedGroupRef:
+    properties:
+      id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      name:
+        example: Field sales
+        type: string
+    type: object
+  Me:
+    properties:
+      authenticated_at:
+        type: string
+      company:
+        $ref: '#/definitions/MeCompany'
+      email:
+        example: alice@acme.com
+        type: string
+      id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+      is_admin:
+        example: false
+        type: boolean
+      is_owner:
+        example: false
+        type: boolean
+      manages:
+        items:
+          $ref: '#/definitions/ManagedGroupRef'
+        type: array
+      products:
+        example:
+        - CRM
+        - HR
+        items:
+          type: string
+        type: array
+      scope_sources:
+        items:
+          $ref: '#/definitions/ScopeGrant'
+        type: array
+      scopes:
+        example:
+        - apps:read
+        - users:read
+        - users:edit
+        items:
+          type: string
+        type: array
+    type: object
+  MeCompany:
+    properties:
+      id:
+        example: 5c6d7e8f-9a0b-1c2d-3e4f-5a6b7c8d9e0f
+        type: string
+      name:
+        example: Acme Corp
+        type: string
+    type: object
+  NewAPIClientSecret:
+    properties:
+      client_id:
+        example: aci_1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      client_secret:
+        example: acc_Xy12Ab34...
+        type: string
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+      is_live:
+        example: true
+        type: boolean
+      last_used_at:
+        type: string
+      prefix:
+        example: acc_Xy12Ab34
+        type: string
+      revoked_at:
+        type: string
+    type: object
+  OAuthError:
+    properties:
+      error:
+        example: invalid_grant
+        type: string
+      error_description:
+        example: The authorization code is invalid, expired or already used
+        type: string
+    type: object
+  OAuthTokenResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJSUzI1NiIsImtpZCI6ImsxIiwidHlwIjoiYXQrand0In0...
+        type: string
+      expires_in:
+        example: 900
+        type: integer
+      id_token:
+        example: eyJhbGciOiJSUzI1NiIsImtpZCI6ImsxIiwidHlwIjoiSldUIn0...
+        type: string
+      refresh_token:
+        example: 3f1c8a0e9d2b4f7a3c5e8b1d0a9f2c4e6f1c8a0e9d2b4f7a3c5e8b1d0a9f2c4e
+        type: string
+      scope:
+        example: openid email
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+    type: object
+  OpenIDConfiguration:
+    properties:
+      authorization_endpoint:
+        example: https://central.alora.io/oauth/authorize
+        type: string
+      authorization_response_iss_parameter_supported:
+        example: true
+        type: boolean
+      claims_supported:
+        example:
+        - sub
+        - email
+        items:
+          type: string
+        type: array
+      code_challenge_methods_supported:
+        example:
+        - S256
+        items:
+          type: string
+        type: array
+      grant_types_supported:
+        example:
+        - authorization_code
+        - refresh_token
+        items:
+          type: string
+        type: array
+      id_token_signing_alg_values_supported:
+        example:
+        - RS256
+        items:
+          type: string
+        type: array
+      introspection_endpoint:
+        example: https://central.alora.io/oauth/introspect
+        type: string
+      issuer:
+        example: https://central.alora.io
+        type: string
+      jwks_uri:
+        example: https://central.alora.io/.well-known/jwks.json
+        type: string
+      response_modes_supported:
+        example:
+        - query
+        items:
+          type: string
+        type: array
+      response_types_supported:
+        example:
+        - code
+        items:
+          type: string
+        type: array
+      revocation_endpoint:
+        example: https://central.alora.io/oauth/revoke
+        type: string
+      scopes_supported:
+        example:
+        - openid
+        - email
+        - profile
+        items:
+          type: string
+        type: array
+      subject_types_supported:
+        example:
+        - public
+        items:
+          type: string
+        type: array
+      token_endpoint:
+        example: https://central.alora.io/oauth/token
+        type: string
+      token_endpoint_auth_methods_supported:
+        example:
+        - client_secret_basic
+        items:
+          type: string
+        type: array
+    type: object
+  PasswordLoginRequest:
+    properties:
+      email:
+        example: alice@acme.com
+        maxLength: 320
+        type: string
+      password:
+        example: correct-horse-battery-staple
+        maxLength: 512
+        minLength: 1
+        type: string
+      return_to:
+        description: 'ReturnTo is where App Central goes afterwards: a path on its
+          own origin.'
+        example: /oauth/authorize?client_id=...
+        maxLength: 2048
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  PressureResponse:
+    properties:
+      heap:
+        example: 12582912
+        type: integer
+      rss:
+        example: 31457280
+        type: integer
+      status:
+        example: ok
+        type: string
+    type: object
+  ProductListItem:
+    properties:
+      base_url:
+        example: https://crm.acme.com
+        type: string
+      description:
+        type: string
+      ends_at:
+        type: string
+      id:
+        example: 2b3c4d5e-6f70-8a9b-0c1d-2e3f4a5b6c7d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      key:
+        example: CRM
+        type: string
+      name:
+        example: Acme CRM
+        type: string
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      seat_limit:
+        example: 50
+        type: integer
+      starts_at:
+        type: string
+    type: object
+  ProductRedirectURIsRequest:
+    properties:
+      redirect_uris:
+        example:
+        - https://crm.acme.com/oidc/callback
+        items:
+          type: string
+        maxItems: 20
+        type: array
+    type: object
+  ProductRegistration:
+    properties:
+      accepts_api_clients:
+        example: false
+        type: boolean
+      base_url:
+        example: https://crm.acme.com
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      has_secret:
+        example: true
+        type: boolean
+      id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      initiate_login_uri:
+        example: https://crm.acme.com/login/initiate
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      key:
+        example: CRM
+        type: string
+      name:
+        example: Acme CRM
+        type: string
+      redirect_uris:
+        example:
+        - https://crm.acme.com/oidc/callback
+        items:
+          type: string
+        type: array
+      roles:
+        example:
+        - Admin
+        - Editor
+        - Viewer
+        items:
+          type: string
+        type: array
+      secret_rotated_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  ProductRolesRequest:
+    properties:
+      roles:
+        example:
+        - Admin
+        - Editor
+        - Viewer
+        items:
+          type: string
+        maxItems: 50
+        type: array
+    type: object
+  ProductSecret:
+    properties:
+      client_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      client_secret:
+        example: acs_Rk9pX3VXYzV2cDFZa2dJd2Q0TGZaM2lPdkJjSmp0bFk
+        type: string
+      rotated_at:
+        type: string
+    type: object
+  ResetPasswordRequest:
+    properties:
+      new_password:
+        example: correct-horse-battery-staple
+        maxLength: 512
+        minLength: 8
+        type: string
+      token:
+        example: c4e8b1d0a9f2c4e6f1c8a0e9d2b4f7a3
+        maxLength: 256
+        minLength: 1
+        type: string
+    required:
+    - new_password
+    - token
+    type: object
+  SSOConnection:
+    properties:
+      client_id:
+        example: 0oa1b2c3d4e5f6g7h8i9
+        type: string
+      created_at:
+        type: string
+      domains:
+        example:
+        - acme.com
+        items:
+          type: string
+        type: array
+      has_secret:
+        example: true
+        type: boolean
+      id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      issuer:
+        example: https://acme.okta.com
+        type: string
+      name:
+        example: Acme Okta
+        type: string
+      scopes:
+        example: openid email profile
+        type: string
+      trust_unverified_email:
+        example: false
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+  SSOConnectionDomainsRequest:
+    properties:
+      domains:
+        example:
+        - acme.com
+        items:
+          type: string
+        maxItems: 50
+        type: array
+    type: object
+  SSOConnectionRequest:
+    properties:
+      client_id:
+        example: 0oa1b2c3d4e5f6g7h8i9
+        maxLength: 256
+        type: string
+      client_secret:
+        example: s3cret-from-the-idp
+        maxLength: 1024
+        minLength: 1
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      issuer:
+        example: https://acme.okta.com
+        maxLength: 512
+        type: string
+      name:
+        example: Acme Okta
+        maxLength: 100
+        minLength: 1
+        type: string
+      scopes:
+        example: openid email profile
+        maxLength: 256
+        type: string
+      trust_unverified_email:
+        example: false
+        type: boolean
+    required:
+    - client_id
+    - is_active
+    - issuer
+    - name
+    type: object
+  SSOConnectionTest:
+    properties:
+      authorization_endpoint:
+        example: https://acme.okta.com/oauth2/v1/authorize
+        type: string
+      issuer:
+        example: https://acme.okta.com
+        type: string
+      jwks_uri:
+        example: https://acme.okta.com/oauth2/v1/keys
+        type: string
+      token_endpoint:
+        example: https://acme.okta.com/oauth2/v1/token
+        type: string
+    type: object
+  ScopeGrant:
+    properties:
+      group_id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      group_name:
+        example: Support
+        type: string
+      scope:
+        example: users:read
+        type: string
+      source:
+        enum:
+        - GROUP
+        - EXTRA
+        example: GROUP
+        type: string
+    type: object
+  SessionListItem:
+    properties:
+      auth_method:
+        enum:
+        - EMAIL
+        - GOOGLE
+        - OIDC
+        example: EMAIL
+        type: string
+      authenticated_at:
+        type: string
+      created_at:
+        type: string
+      device_label:
+        example: Chrome
+        type: string
+      email:
+        example: member@acme.com
+        type: string
+      id:
+        example: 7e8f9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b
+        type: string
+      ip_address:
+        example: 127.0.0.1
+        type: string
+      kind:
+        enum:
+        - CENTRAL
+        - PRODUCT
+        example: CENTRAL
+        type: string
+      last_seen_at:
+        type: string
+      product_key:
+        example: CRM
+        type: string
+    type: object
+  SetAPIClientProductsRequest:
+    properties:
+      product_ids:
+        example:
+        - 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        items:
+          type: string
+        maxItems: 100
+        type: array
+    type: object
+  SetAPIClientScopesRequest:
+    properties:
+      scopes:
+        example:
+        - api:read
+        - grpc:read
+        items:
+          type: string
+        maxItems: 20
+        type: array
+    type: object
+  SetCompanyDomainRequest:
+    properties:
+      domain:
+        example: acme.com
+        maxLength: 253
+        type: string
+      verified:
+        example: true
+        type: boolean
+    type: object
+  SetGroupProductGrantsRequest:
+    properties:
+      product_grants:
+        items:
+          $ref: '#/definitions/GroupProductGrantRequest'
+        type: array
+    type: object
+  SetGroupScopesRequest:
+    properties:
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        maxItems: 50
+        type: array
+    type: object
+  SetUserScopesRequest:
+    properties:
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        maxItems: 50
+        type: array
+    type: object
+  Subscription:
+    properties:
+      ends_at:
+        type: string
+      id:
+        example: 2b3c4d5e-6f70-8a9b-0c1d-2e3f4a5b6c7d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      product_key:
+        example: CRM
+        type: string
+      product_name:
+        example: Acme CRM
+        type: string
+      seat_limit:
+        example: 50
+        type: integer
+      starts_at:
+        type: string
+    type: object
+  SubscriptionRequest:
+    properties:
+      ends_at:
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      seat_limit:
+        example: 50
+        minimum: 1
+        type: integer
+    required:
+    - is_active
+    type: object
+  UpdateAPIClientRequest:
+    properties:
+      description:
+        example: Copies orders to the warehouse
+        maxLength: 500
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Nightly sync
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - is_active
+    - name
+    type: object
+  UpdateClientRequest:
+    properties:
+      name:
+        example: Acme Corporation
+        maxLength: 200
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  UpdateCompanyRequest:
+    properties:
+      clear_max_seats:
+        example: false
+        type: boolean
+      is_active:
+        example: false
+        type: boolean
+      max_seats:
+        example: 100
+        minimum: 1
+        type: integer
+      name:
+        example: Acme Corporation
+        maxLength: 200
+        minLength: 1
+        type: string
+      subscription_status:
+        enum:
+        - TRIAL
+        - ACTIVE
+        - SUSPENDED
+        - CANCELLED
+        example: SUSPENDED
+        type: string
+    type: object
+  UpdateGroupRequest:
+    properties:
+      description:
+        example: Helpdesk staff
+        maxLength: 500
+        type: string
+      name:
+        example: Support
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  UpdateProductRequest:
+    properties:
+      accepts_api_clients:
+        example: true
+        type: boolean
+      base_url:
+        example: https://crm.acme.com
+        maxLength: 2048
+        type: string
+      description:
+        example: Customer relationships
+        maxLength: 1000
+        type: string
+      initiate_login_uri:
+        example: https://crm.acme.com/login/initiate
+        maxLength: 2048
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Acme CRM
+        maxLength: 200
+        minLength: 1
+        type: string
+    required:
+    - is_active
+    - name
+    type: object
+  UpdateUserRequest:
+    properties:
+      is_active:
+        example: false
+        type: boolean
+    required:
+    - is_active
+    type: object
+  UpdateUserResponse:
+    properties:
+      id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+      is_active:
+        example: false
+        type: boolean
+    type: object
+  UserAccess:
+    properties:
+      group_id:
+        type: string
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      product_key:
+        example: CRM
+        type: string
+      product_name:
+        example: Acme CRM
+        type: string
+      role_name:
+        example: Editor
+        type: string
+      source:
+        enum:
+        - DIRECT
+        - GROUP
+        example: GROUP
+        type: string
+    type: object
+  UserDetail:
+    properties:
+      access:
+        items:
+          $ref: '#/definitions/UserAccess'
+        type: array
+      account_type:
+        enum:
+        - EMAIL
+        - OAUTH_ONLY
+        - HYBRID
+        example: EMAIL
+        type: string
+      created_at:
+        type: string
+      direct_grants:
+        items:
+          $ref: '#/definitions/UserGrant'
+        type: array
+      email:
+        example: member@acme.com
+        type: string
+      extra_scopes:
+        example:
+        - sessions:read
+        items:
+          type: string
+        type: array
+      groups:
+        items:
+          $ref: '#/definitions/UserGroupMembership'
+        type: array
+      id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      is_admin:
+        example: false
+        type: boolean
+      is_owner:
+        example: false
+        type: boolean
+      login_policy:
+        $ref: '#/definitions/UserLoginPolicy'
+      manages:
+        items:
+          $ref: '#/definitions/ManagedGroupRef'
+        type: array
+      own_policy_id:
+        type: string
+      scopes:
+        items:
+          $ref: '#/definitions/ScopeGrant'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  UserGrant:
+    properties:
+      product_id:
+        example: 3f7c1b2e-5d4a-4c8b-9e10-2a6b7c8d9e0f
+        type: string
+      product_key:
+        example: CRM
+        type: string
+      product_name:
+        example: Acme CRM
+        type: string
+      role_name:
+        example: Editor
+        type: string
+      valid_until:
+        type: string
+    type: object
+  UserGroupMembership:
+    properties:
+      assigned_at:
+        type: string
+      id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      name:
+        example: Support
+        type: string
+      system_key:
+        example: ADMINS
+        type: string
+    type: object
+  UserGroupRef:
+    properties:
+      id:
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      name:
+        example: Support
+        type: string
+      system_key:
+        example: ADMINS
+        type: string
+    type: object
+  UserListItem:
+    properties:
+      account_type:
+        enum:
+        - EMAIL
+        - OAUTH_ONLY
+        - HYBRID
+        example: EMAIL
+        type: string
+      created_at:
+        type: string
+      email:
+        example: member@acme.com
+        type: string
+      groups:
+        items:
+          $ref: '#/definitions/UserGroupRef'
+        type: array
+      id:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      is_admin:
+        example: false
+        type: boolean
+      is_owner:
+        example: false
+        type: boolean
+    type: object
+  UserListResponse:
+    properties:
+      nextCursor:
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/UserListItem'
+        type: array
+    type: object
+  UserLoginPolicy:
+    properties:
+      allow_google:
+        example: true
+        type: boolean
+      allow_password:
+        example: true
+        type: boolean
+      id:
+        example: 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
+        type: string
+      name:
+        example: Default
+        type: string
+      source:
+        enum:
+        - USER
+        - GROUP
+        - DEFAULT
+        example: DEFAULT
+        type: string
+      sso_connection_id:
+        type: string
+    type: object
+  UserScopesResponse:
+    properties:
+      scopes:
+        example:
+        - users:read
+        - sessions:read
+        items:
+          type: string
+        type: array
+    type: object
+info:
+  contact:
+    name: Alora Platform
+    url: https://alora.io/support
+  description: |-
+    App Central: one sign-in for every product of the platform, and the OpenID Provider those products trust.
+
+    ## Two kinds of token
+    People sign in once at App Central — with a password, Google, or their company's SSO, as their company's login policy allows. That opens an App Central session (an HttpOnly cookie) and yields an App Central access token (audience `app-central`), the ONLY token the `/api` routes accept. It describes everything about App Central: `scope` (what the person may do here) and `products` (the keys of the apps they may open). A product never sees it: when a product is launched, its backend runs an ordinary OpenID Connect authorization-code flow with PKCE against `/oauth/authorize` and `/oauth/token`, and receives a token for itself alone (audience `product:<key>`, carrying only its own roles).
+
+    ## Scopes
+    Every `/api/admin` route names the App Central scope it needs: `<feature>:read` to look, `<feature>:edit` to change (edit includes read). The features are users, groups, invitations, sessions, products (read only), company and api-clients; everyone signed in holds `apps:read`, and a platform Owner also holds `owner`. A person's scopes are their groups' plus extras given to them alone, and the Admins group holds every scope. Nobody gives or takes away a scope they do not hold, and nobody acts on someone with more access than they have (403, in those words); the Owner is bound by neither. The token's claims are a snapshot: App Central re-reads the person's access on every request, and a response carries `X-Alora-Token-Stale: 1` when the token no longer describes it — refresh, and read `/api/me` again.
+
+    ## Group managers
+    A group's managers add and remove its members, and nothing else, without `groups:edit` for the whole company. Holders of `groups:edit` appoint them (`POST /api/admin/groups/{id}/managers`) under the same two rules: they must hold every scope the group gives, since a manager can hand the group out, and the person may have no more reach than they have — reach being the scopes someone holds plus those of the groups they manage, which is what the second rule measures everywhere. Nobody appoints themselves; the Admins group never has managers. A manager works through `/api/me/managed-groups`, which needs no scope and opens only on the groups they manage, never on the group's managers themselves.
+
+    ## Authorizing requests here
+    Sign in with `POST /auth/login/password`, copy `access_token` from the response, then press **Authorize** and paste it. Every `/api` route reads the bearer token from the `Authorization` header only — never from a cookie — and re-checks its session against the database on every request.
+
+    ## Companies
+    No `/api/admin` endpoint accepts a company identifier: each is scoped to the caller's own company. Only the Owner console (`/api/owner`) names a company, in the path, and every write there must repeat it in the `X-Alora-Target-Company` header. The company-management routes are documented at their `/api/admin` path; the Owner console serves each of them for any company at the same path under `/api/owner/companies/{cid}` (for example `PUT /api/owner/companies/{cid}/groups/{gid}/scopes`).
+
+    ## Errors
+    Every failure renders as `{"error": "<safe label>", "reqId": "<request id>"}`, except the token, revocation and introspection endpoints, which answer in the RFC 6749 shape `{"error": "<code>", "error_description": "..."}`. Quote `reqId` when reporting a problem.
+  license:
+    name: Proprietary
+  termsOfService: https://alora.io/terms
+  title: App Central API
+  version: "2.0"
+paths:
+  /.well-known/jwks.json:
+    get:
+      description: The RS256 public keys every token is signed with, including any
+        key being retired during a rotation. Products verify their access tokens and
+        ID tokens offline against these. Cached for five minutes, so a rotated key
+        propagates quickly without every verifier hitting this endpoint on every request.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/JWKS'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Public signing keys (JWKS)
+      tags:
+      - standards
+  /.well-known/openid-configuration:
+    get:
+      description: 'Where a product finds everything else: the authorize, token, revocation
+        and introspection endpoints, the JWKS, and exactly what is supported — the
+        code flow with S256 PKCE, client_secret_basic, RS256.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/OpenIDConfiguration'
+      summary: OpenID Provider metadata
+      tags:
+      - standards
+  /api/admin/api-clients:
+    get:
+      description: 'Every API client of the company: what each may get a token for
+        (`products`), where that token may be used (`scopes`) and how many live secrets
+        it has. Never a secret. Needs `api-clients:read`.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/APIClient'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks api-clients:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List API clients
+      tags:
+      - api-clients
+    post:
+      consumes:
+      - application/json
+      description: An application's identity. It starts with no scopes, no products
+        and no secret, so it can do nothing until each is chosen. Its `id` is its
+        OAuth `client_id`. Needs `api-clients:edit`.
+      parameters:
+      - description: Its name
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/CreateAPIClientRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/APIClient'
+        "400":
+          description: Malformed body
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks api-clients:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: An API client with this name already exists
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create an API client
+      tags:
+      - api-clients
+  /api/admin/api-clients/{id}:
+    delete:
+      description: Its scopes, products and secrets go with it, and it gets no token
+        again. The audit trail keeps what it was. Needs `api-clients:edit`.
+      parameters:
+      - description: API client id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Caller lacks api-clients:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such API client in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete an API client
+      tags:
+      - api-clients
+    get:
+      description: 'One API client with its secrets — each told apart by its prefix,
+        never its value — and `product_choices`: the products that could go on its
+        list (live subscriptions to products that accept API clients). Needs `api-clients:read`.'
+      parameters:
+      - description: API client id (its client_id)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/APIClientDetail'
+        "403":
+          description: Caller lacks api-clients:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such API client in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an API client
+      tags:
+      - api-clients
+    patch:
+      consumes:
+      - application/json
+      description: Its complete settable state. Switched off (`is_active` false),
+        it gets no token, whatever its secrets. Needs `api-clients:edit`.
+      parameters:
+      - description: API client id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Name, description and whether it is on
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateAPIClientRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/APIClient'
+        "400":
+          description: Malformed body
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks api-clients:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such API client in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: An API client with this name already exists
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change an API client
+      tags:
+      - api-clients
+  /api/admin/api-clients/{id}/products:
+    put:
+      consumes:
+      - application/json
+      description: 'The COMPLETE list: any product omitted is taken off. A product
+        added must be one the company subscribes to, and one the Owner has let accept
+        API clients; a product already on the list may stay, and earns no token while
+        it is not usable. Needs `api-clients:edit`.'
+      parameters:
+      - description: API client id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The complete list of product ids
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SetAPIClientProductsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/APIClientProductsResponse'
+        "400":
+          description: Malformed body, or a product that cannot be added
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks api-clients:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such API client in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set the products an API client may get a token for
+      tags:
+      - api-clients
+  /api/admin/api-clients/{id}/scopes:
+    put:
+      consumes:
+      - application/json
+      description: 'The COMPLETE set of application scopes: `api:read` / `api:edit`
+        (a product''s REST API), `grpc:read` / `grpc:edit` (its gRPC services) and
+        `mcp:tools` (its MCP tools). Any scope omitted is taken away, and an edit
+        scope brings its read scope. Its product tokens carry these, or fewer. Needs
+        `api-clients:edit`.'
+      parameters:
+      - description: API client id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The complete set of scopes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SetAPIClientScopesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/APIClientScopesResponse'
+        "400":
+          description: Malformed body, or a scope that is not an application scope
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks api-clients:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such API client in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set where an API client's credential may be used
+      tags:
+      - api-clients
+  /api/admin/api-clients/{id}/secrets:
+    post:
+      consumes:
+      - application/json
+      description: 'Returns the secret''s value THIS ONCE: App Central keeps only
+        its hash. At most two secrets are live at a time, so a client rotates without
+        downtime — make a second, deploy it, then revoke the first. The body is optional;
+        `expires_in_days` limits the secret''s life. Needs `api-clients:edit`.'
+      parameters:
+      - description: API client id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Optional lifetime
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/CreateAPIClientSecretRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/NewAPIClientSecret'
+        "400":
+          description: Malformed body
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks api-clients:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such API client in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: It already has two live secrets
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Make an API client a secret
+      tags:
+      - api-clients
+  /api/admin/api-clients/{id}/secrets/{sid}:
+    delete:
+      description: It stops working at once. The secret is kept, revoked, so the record
+        says it existed. Needs `api-clients:edit`.
+      parameters:
+      - description: API client id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Secret id
+        in: path
+        name: sid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Revoked
+        "403":
+          description: Caller lacks api-clients:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such live secret of this API client
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Revoke an API client's secret
+      tags:
+      - api-clients
+  /api/admin/client:
+    get:
+      description: 'The organisation of the caller: its name, domain, plan and standing.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ClientDetail'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks company:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the company record
+      tags:
+      - tenant
+    patch:
+      consumes:
+      - application/json
+      description: 'The name is all an Admin may change. The plan, the company''s
+        standing and its domain are the Owner''s to set: an Admin must not be able
+        to un-suspend their own company or verify a domain for it.'
+      parameters:
+      - description: The new name
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateClientRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ClientDetail'
+        "400":
+          description: Unknown field, or a name outside 1-200 characters
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks company:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rename the company
+      tags:
+      - tenant
+  /api/admin/groups:
+    get:
+      description: Every group in the company with what it gives — App Central scopes
+        and product roles — its login policy, and how many members it has. The Admins
+        group (`system_key` ADMINS) is always present and holds every scope. Needs
+        `groups:read`.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/GroupListItem'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List groups
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/json
+      description: 'Creates a group with the App Central scopes it gives, in one transaction.
+        Needs `groups:edit`, and you can only give scopes you hold yourself (the Owner
+        excepted). An edit scope brings its read scope. Product grants are the Owner''s
+        alone: each must name a product the company subscribes to and a role in its
+        catalogue.'
+      parameters:
+      - description: The group
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/CreateGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/GroupResponse'
+        "400":
+          description: Malformed body, an unknown scope, or an unusable product grant
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:edit, lacks a scope they tried to give,
+            or is not the Owner and gave products
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: A group with this name already exists
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a group
+      tags:
+      - groups
+  /api/admin/groups/{id}:
+    delete:
+      description: Memberships and grants cascade; members lose what the group gave.
+        Needs `groups:edit`, and deleting takes the group's scopes away from its members,
+        so you must hold all of them (the Owner excepted). A group that gives products
+        is the Owner's to delete. The Admins group cannot be deleted.
+      parameters:
+      - description: Group id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Caller lacks groups:edit or one of the group's scopes, or the
+            group gives products
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: This is the Admins group
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a group
+      tags:
+      - groups
+    get:
+      description: One group with what it grants and its members. A group with no
+        members returns an empty `members` array, never null.
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GroupDetail'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a group
+      tags:
+      - groups
+    patch:
+      consumes:
+      - application/json
+      description: Needs `groups:edit`. The Admins group cannot be renamed.
+      parameters:
+      - description: Group id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Name and description
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateGroupRequest'
+      responses:
+        "204":
+          description: Updated
+        "403":
+          description: Caller lacks groups:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The name is taken, or this is the Admins group
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rename a group
+      tags:
+      - groups
+  /api/admin/groups/{id}/managers:
+    post:
+      consumes:
+      - application/json
+      description: 'Makes someone — by EITHER `user_id` or `email` — a manager of
+        the group: they may add and remove its members, and nothing else, without
+        `groups:edit`. Needs `groups:edit` and every scope the group gives (a manager
+        can hand the group out), and the person may have no more reach than you: the
+        scopes they hold plus those of the groups they already manage. You can''t
+        appoint yourself, and the Admins group never has managers. The Owner console
+        appoints at /api/owner/companies/{cid}/groups/{gid}/managers, bound by neither
+        scope rule.'
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User id or email address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/AppointGroupManagerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/GroupManagerAppointment'
+        "400":
+          description: Neither user_id nor email, a malformed body, or yourself
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:edit, lacks one of the group's scopes,
+            or the person has more reach
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group or user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The Admins group, or they already manage it
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Appoint a group manager
+      tags:
+      - groups
+  /api/admin/groups/{id}/managers/{userId}:
+    delete:
+      description: Ends an appointment. Needs `groups:edit` and every scope the group
+        gives, and the manager may have no more reach than you. The Owner console
+        dismisses at /api/owner/companies/{cid}/groups/{gid}/managers/{uid}.
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User id
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Dismissed
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:edit, lacks one of the group's scopes,
+            or the manager has more reach
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group, user or appointment in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Dismiss a group manager
+      tags:
+      - groups
+  /api/admin/groups/{id}/members:
+    post:
+      consumes:
+      - application/json
+      description: Identify the user by EITHER `user_id` or `email`. Both the group
+        and the user must belong to the company. Adding someone to the Admins group
+        makes them an Admin at once.
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User id or email address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/AddMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/AddMemberResponse'
+        "400":
+          description: Neither user_id nor email supplied, or a malformed body
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:edit, lacks one of the group's scopes,
+            or the person has more access
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group or user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: User is already a member of this group
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add a member to a group
+      tags:
+      - groups
+  /api/admin/groups/{id}/members/{userId}:
+    delete:
+      description: Scoped by user, group and company together. The company's last
+        active Admin cannot be removed from the Admins group.
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User id
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Removed
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:edit, lacks one of the group's scopes,
+            or the person has more access
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such membership in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The last active Admin
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a member from a group
+      tags:
+      - groups
+  /api/admin/groups/{id}/scopes:
+    put:
+      consumes:
+      - application/json
+      description: 'The COMPLETE set of App Central scopes: any scope omitted is taken
+        away, and an edit scope brings its read scope. Needs `groups:edit`, and you
+        can only give or take away scopes you hold yourself (the Owner excepted).
+        The Admins group holds every scope and takes none. Every member''s next request
+        sees the change.'
+      parameters:
+      - description: Group id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The complete set of scopes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SetGroupScopesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GroupScopesResponse'
+        "400":
+          description: Malformed body or an unknown scope
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks groups:edit, or lacks a scope they tried to give
+            or take
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: This is the Admins group
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set the scopes a group gives
+      tags:
+      - groups
+  /api/admin/invitations:
+    get:
+      description: Every invitation of the company, in any status. Token hashes are
+        never projected, and the invite link is not recoverable here — an invitation
+        whose link was lost must be revoked and re-issued.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/InvitationListItem'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks invitations:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List invitations
+      tags:
+      - invitations
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Issues an invitation into the company, naming the groups the new account joins — which is what gives it access (and, for the Admins group, makes it an Admin). There is no company field: it comes from the route.
+
+        Refused if the address already belongs to a live member, or already has a live invitation. `invite_url` is returned so the link can be shared by hand when SMTP is not configured; email delivery is best-effort and off the response path.
+      parameters:
+      - description: Address to invite, and the groups to join
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/CreateInvitationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/CreateInvitationResponse'
+        "400":
+          description: Malformed body, or a group of another company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks invitations:edit, or lacks a scope one of the
+            groups gives
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: Address already belongs to a user, or already has a live invitation
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Invite a user
+      tags:
+      - invitations
+  /api/admin/invitations/{id}:
+    delete:
+      description: Cancels a PENDING invitation so its link stops working. An id from
+        another organisation affects no rows and reports 404.
+      parameters:
+      - description: Invitation id
+        example: 8c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks invitations:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No pending invitation with that id in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Revoke an invitation
+      tags:
+      - invitations
+  /api/admin/products:
+    get:
+      description: The products the company subscribes to. `id` is the SUBSCRIPTION
+        id; the product itself is `product_id`.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ProductListItem'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks products:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List product subscriptions
+      tags:
+      - tenant
+  /api/admin/sessions:
+    get:
+      description: 'Every live sign-in in the company of the caller: App Central sessions
+        (kind CENTRAL) and the product logins opened under them (kind PRODUCT, with
+        the product''s key). Most recently used first. Each names its user by address;
+        no token hashes and no user ids are projected, and the device label is display-only,
+        never used for a security decision.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/SessionListItem'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks sessions:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List live sessions
+      tags:
+      - sessions
+  /api/admin/sessions/{id}:
+    delete:
+      description: |-
+        Ends one sign-in. Revoking an App Central session also ends every product login opened under it; revoking a product login ends only that. The next refresh of anything revoked fails, and App Central's own access tokens for the session stop working at once.
+
+        A product's access token already issued stays valid until it expires (at most fifteen minutes) unless the product introspects it. Scoped to the company of the caller: a session id from another organisation reports 404.
+      parameters:
+      - description: Session id
+        example: 7e8f9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks sessions:edit
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such live session in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Revoke a session
+      tags:
+      - sessions
+  /api/admin/users:
+    get:
+      description: |-
+        One keyset page of the company's users, with their groups and whether each is an Admin or an Owner.
+
+        Pass the `nextCursor` of a response as `cursor` to fetch the following page; a null `nextCursor` means there is no further page. The cursor is an opaque user id — internally a (created_at, id) position, stable under concurrent inserts in a way OFFSET is not. A cursor from another company simply fails to resolve.
+      parameters:
+      - description: nextCursor from the previous page
+        in: query
+        name: cursor
+        type: string
+      - default: 25
+        description: Page size, 1-100
+        in: query
+        maximum: 100
+        minimum: 1
+        name: take
+        type: integer
+      - description: A literal, case-insensitive part of the address
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/UserListResponse'
+        "400":
+          description: take out of range, or a cursor that does not resolve in this
+            company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks users:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - users
+  /api/admin/users/{id}:
+    get:
+      description: |-
+        One user with everything that decides what they can do: their groups, their direct product grants, their effective access (direct and through groups, each with its source) and the login policy that applies to them, with where it came from.
+
+        An unknown id and an id belonging to another organisation are answered identically.
+      parameters:
+      - description: User id
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/UserDetail'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks users:read
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a user
+      tags:
+      - users
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        The only editable field is `is_active`. Deactivation takes effect at once: every session of the user ends — at App Central and in every product — and App Central's tokens for them stop working on their next request.
+
+        Needs `users:edit`. Nobody may modify their own account here; nobody may act on someone with more access than they have (the Owner excepted); and the company's last active Admin cannot be deactivated.
+      parameters:
+      - description: User id
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New active state
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/UpdateUserResponse'
+        "400":
+          description: Malformed body, or the target is the caller
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks users:edit, or the target has more access than
+            the caller
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The target is the last active Admin
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Activate or deactivate a user
+      tags:
+      - users
+  /api/admin/users/{id}/password-reset:
+    post:
+      description: |-
+        Mints a reset link for a user in the company. Needs `users:edit`. A reset is an account-takeover primitive, so nobody may reset someone with more access than they have (the Owner excepted).
+
+        Any token already outstanding for that user is deleted first, so exactly one link is ever live. The link is emailed; only outside production, with no mail configured, is reset_url returned instead. Production without mail answers 503.
+      parameters:
+      - description: User id
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/IssueResetResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks users:edit, or the target has more access than
+            the caller
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "503":
+          description: Production with no mail configured
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Issue a password reset for a user
+      tags:
+      - passwords
+  /api/admin/users/{id}/scopes:
+    put:
+      consumes:
+      - application/json
+      description: |-
+        The COMPLETE set of App Central scopes given to this person alone, on top of what their groups give: any scope omitted is taken away. An edit scope brings its read scope.
+
+        Needs `users:edit`, and the two scope rules apply: you can only give or take away scopes you hold yourself, and only for someone with no more access than you (the Owner is bound by neither). Nobody changes their own extras. The person's next request sees the change; their login token says so with `X-Alora-Token-Stale`.
+      parameters:
+      - description: User id
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The complete set of extra scopes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SetUserScopesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/UserScopesResponse'
+        "400":
+          description: Malformed body, an unknown scope, or the target is the caller
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller lacks users:edit, lacks a scope they tried to give or
+            take, or the target has more access
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set a person's extra scopes
+      tags:
+      - users
+  /api/me:
+    get:
+      description: Who the caller is, in which company, whether they are an Admin
+        or an Owner, and which admin feature keys they hold (an Admin holds all).
+        App Central uses it to decide what to show; every route re-checks its own
+        guard server-side.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Me'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Your account
+      tags:
+      - me
+  /api/me/apps:
+    get:
+      description: The products the caller may use right now — a role through a group
+        or granted directly, a live subscription, an active product — each with the
+        caller's roles in it and a `launch_url` that starts the product's own sign-in.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/App'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Your apps
+      tags:
+      - me
+  /api/me/change-password:
+    post:
+      consumes:
+      - application/json
+      description: 'The current password is re-verified even though the caller holds
+        a valid token: that re-authentication is what stops a stolen token from becoming
+        permanent account takeover. A wrong one is 403, not 401 — the token was fine,
+        and a client that refreshes on 401 must not re-send the guess — and each account
+        gets five attempts per fifteen minutes, however many addresses they come from.
+        On success every session of the account ends — this one too — so the caller
+        signs in again.'
+      parameters:
+      - description: Current and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Password changed; every session ended
+        "400":
+          description: Malformed body, or the account has no password
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: The current password is incorrect
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Too many attempts for this account
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change your own password
+      tags:
+      - me
+  /api/me/managed-groups:
+    get:
+      description: Every group the caller manages, with what it gives and how many
+        members it has. Empty for anyone who manages none; needs no scope.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/GroupListItem'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: The groups I manage
+      tags:
+      - me
+  /api/me/managed-groups/{gid}:
+    get:
+      description: 'One group the caller manages: its members, its managers, what
+        it gives and the sign-in policy it carries — adding someone can put them under
+        that policy. A group the caller does not manage is not found.'
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: gid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GroupDetail'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not a group you manage
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: A group I manage
+      tags:
+      - me
+  /api/me/managed-groups/{gid}/members:
+    post:
+      consumes:
+      - application/json
+      description: Identify the person by EITHER `user_id` or `email`. They must have
+        no more reach than you — the scopes you hold plus those of the groups you
+        manage — and may not be one of the group's managers, you included. Budgeted
+        per account.
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: gid
+        required: true
+        type: string
+      - description: User id or email address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/AddMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/AddMemberResponse'
+        "400":
+          description: Neither user_id nor email, or a malformed body
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: One of the group's managers, or someone with more reach
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not a group you manage, or no such user
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: Already a member
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Too many changes; see Retry-After
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add a member to a group I manage
+      tags:
+      - me
+  /api/me/managed-groups/{gid}/members/{uid}:
+    delete:
+      description: The member must have no more reach than you and may not be one
+        of the group's managers, you included. Budgeted per account.
+      parameters:
+      - description: Group id
+        example: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+        in: path
+        name: gid
+        required: true
+        type: string
+      - description: User id
+        example: 4b5c6d7e-8f90-1a2b-3c4d-5e6f7a8b9c0d
+        in: path
+        name: uid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Removed
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: One of the group's managers, or someone with more reach
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not a group you manage, or not a member
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Too many changes; see Retry-After
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a member from a group I manage
+      tags:
+      - me
+  /api/owner/api-clients:
+    get:
+      description: Every API client of every company, by company and then by name,
+        each naming its company. For the Owner's Client credentials page.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/APIClient'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller is not an Owner, or signed in too long ago
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List every company's API clients
+      tags:
+      - owner
+  /api/owner/companies:
+    get:
+      description: Every company, with its standing and member count. The platform
+        company (`is_platform`) is the Owners' own.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/Company'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller is not an Owner, or signed in more than twelve hours
+            ago
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List companies
+      tags:
+      - owner
+    post:
+      consumes:
+      - application/json
+      description: Creates the company together with its Admins group and its default
+        login policy (password and Google), in one statement. Invite its first Admin
+        into the Admins group next.
+      parameters:
+      - description: The company
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/CreateCompanyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/Company'
+        "400":
+          description: Malformed body
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller is not an Owner, or signed in too long ago
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a company
+      tags:
+      - owner
+  /api/owner/companies/{cid}:
+    get:
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Company'
+        "404":
+          description: No such company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a company
+      tags:
+      - owner
+    patch:
+      consumes:
+      - application/json
+      description: 'Send only what changes. `is_active: false` suspends the company:
+        nobody in it can sign in, its App Central sessions stop working at once, and
+        its products'' logins stop renewing. The platform company cannot be suspended.'
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The changes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateCompanyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Company'
+        "400":
+          description: Malformed body, or the target header does not match
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The platform company cannot be suspended
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a company
+      tags:
+      - owner
+  /api/owner/companies/{cid}/domain:
+    put:
+      consumes:
+      - application/json
+      description: A verified domain is unique across companies. It is how the login
+        page recognises the company's addresses, and what lets its SSO connections
+        claim the domain.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The domain, or null
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SetCompanyDomainRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Company'
+        "409":
+          description: Another company verified this domain
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set a company's email domain
+      tags:
+      - owner
+  /api/owner/companies/{cid}/groups/{gid}/login-policy:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Group id
+        in: path
+        name: gid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The policy, or null
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/AssignLoginPolicyRequest'
+      responses:
+        "204":
+          description: Assigned
+        "400":
+          description: No such policy in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set the login policy a group's members sign in under
+      tags:
+      - owner
+  /api/owner/companies/{cid}/groups/{gid}/product-grants:
+    put:
+      consumes:
+      - application/json
+      description: 'The COMPLETE set: one role per product, and any product omitted
+        loses the grant. Every member''s products see the change at their next refresh,
+        or at once through introspection.'
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Group id
+        in: path
+        name: gid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: Product grants
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SetGroupProductGrantsRequest'
+      responses:
+        "204":
+          description: Set
+        "400":
+          description: A product the company does not subscribe to, or a role outside
+            its catalogue
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such group in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set the product roles a group confers
+      tags:
+      - owner
+  /api/owner/companies/{cid}/login-policies:
+    get:
+      description: Highest priority first. Exactly one is the company default, which
+        applies to everyone with no policy of their own and no group policy.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/LoginPolicy'
+            type: array
+        "401":
+          description: Missing, invalid or stale token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller is not an Owner, or signed in too long ago
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a company's login policies
+      tags:
+      - owner
+    post:
+      consumes:
+      - application/json
+      description: A policy allows any of password, Google and one of the company's
+        SSO connections, and must allow at least one. Priorities are unique within
+        a company; when a user's groups carry several policies, the highest priority
+        wins.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The policy
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/LoginPolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/LoginPolicy'
+        "400":
+          description: Malformed body, no method allowed, or an SSO connection of
+            another company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Caller is not an Owner, signed in too long ago, or the target
+            header does not match
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: A policy with this name or priority already exists
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a login policy
+      tags:
+      - owner
+  /api/owner/companies/{cid}/login-policies/{pid}:
+    delete:
+      description: Neither the default policy nor one still assigned to a user or
+        group can be deleted.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Policy id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: No such policy in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The policy is the default or still assigned
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a login policy
+      tags:
+      - owner
+    patch:
+      consumes:
+      - application/json
+      description: The body is the complete desired state. A session signed in with
+        a method the policy no longer allows ends at its next refresh.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Policy id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The policy
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/LoginPolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LoginPolicy'
+        "400":
+          description: Malformed body, no method allowed, or an SSO connection of
+            another company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such policy in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: A policy with this name or priority already exists
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a login policy
+      tags:
+      - owner
+  /api/owner/companies/{cid}/login-policies/{pid}/default:
+    put:
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Policy id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Now the default
+        "404":
+          description: No such policy in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Make a policy the company default
+      tags:
+      - owner
+  /api/owner/companies/{cid}/sso-connections:
+    get:
+      description: Each with its domains and whether a secret is set. Secrets are
+        never returned.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/SSOConnection'
+            type: array
+        "403":
+          description: Caller is not an Owner, or signed in too long ago
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a company's SSO connections
+      tags:
+      - owner
+    post:
+      consumes:
+      - application/json
+      description: An OpenID Connect provider of the company's (Okta, Entra ID, Google
+        Workspace, ...). Register App Central's callback there as the redirect URI.
+        The client secret is sealed on arrival and never returned. A connection signs
+        people in only once domains are set on it and a login policy names it.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The connection
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SSOConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/SSOConnection'
+        "400":
+          description: Malformed body, or an issuer that is not an absolute https
+            URL
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The name, or the issuer and client id, is taken
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "503":
+          description: No key configured to seal the secret
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Register an SSO connection
+      tags:
+      - owner
+  /api/owner/companies/{cid}/sso-connections/{sid}:
+    patch:
+      consumes:
+      - application/json
+      description: The complete desired state. Leave client_secret out to keep the
+        stored one.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Connection id
+        in: path
+        name: sid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The connection
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SSOConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/SSOConnection'
+        "404":
+          description: No such connection in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update an SSO connection
+      tags:
+      - owner
+  /api/owner/companies/{cid}/sso-connections/{sid}/domains:
+    put:
+      consumes:
+      - application/json
+      description: The COMPLETE set. A domain can be on one connection only, and never
+        on one whose company is not the domain's verified owner. The login page offers
+        the connection for these domains, and a first SSO sign-in links an account
+        only at one of them.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Connection id
+        in: path
+        name: sid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The domains
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SSOConnectionDomainsRequest'
+      responses:
+        "204":
+          description: Set
+        "404":
+          description: No such connection in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: A domain is on another connection, or is another company's
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set the email domains a connection signs in
+      tags:
+      - owner
+  /api/owner/companies/{cid}/sso-connections/{sid}/test:
+    post:
+      description: Fetches the provider's discovery document through the same guarded
+        client sign-in uses, and checks it names the configured issuer.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Connection id
+        in: path
+        name: sid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/SSOConnectionTest'
+        "404":
+          description: No such connection in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "502":
+          description: The provider could not be used
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Test an SSO connection
+      tags:
+      - owner
+  /api/owner/companies/{cid}/subscriptions:
+    get:
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/Subscription'
+            type: array
+        "404":
+          description: No such company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a company's subscriptions
+      tags:
+      - owner
+  /api/owner/companies/{cid}/subscriptions/{pid}:
+    put:
+      consumes:
+      - application/json
+      description: 'A subscription is switched off, never deleted. Switching it off
+        ends the company''s access to the product: App Central stops offering it and
+        every product login ends at its next refresh.'
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The subscription
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SubscriptionRequest'
+      responses:
+        "204":
+          description: Set
+        "404":
+          description: No such company or product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Subscribe a company to a product, or change it
+      tags:
+      - owner
+  /api/owner/companies/{cid}/users/{uid}/grants/{pid}:
+    delete:
+      description: Access the user holds through a group is not affected.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: User id
+        in: path
+        name: uid
+        required: true
+        type: string
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: No such direct grant in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a user's direct product role
+      tags:
+      - owner
+    put:
+      consumes:
+      - application/json
+      description: |-
+        Creates or replaces the user's direct role in one product. Most access is better granted through a group; a direct grant is for the exception. The company must subscribe to the product and the role must be in the product's catalogue.
+
+        Products see the change at their next refresh, or at once if they introspect.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: User id
+        in: path
+        name: uid
+        required: true
+        type: string
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The role
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/GrantRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Granted
+        "400":
+          description: Malformed body, or no such role in the product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The company does not subscribe to the product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Grant a user a product role directly
+      tags:
+      - owner
+  /api/owner/companies/{cid}/users/{uid}/login-policy:
+    put:
+      consumes:
+      - application/json
+      description: A user's own policy overrides their groups' and the default. A
+        null policy_id removes it.
+      parameters:
+      - description: Company id
+        in: path
+        name: cid
+        required: true
+        type: string
+      - description: User id
+        in: path
+        name: uid
+        required: true
+        type: string
+      - description: Must repeat the company id
+        in: header
+        name: X-Alora-Target-Company
+        required: true
+        type: string
+      - description: The policy, or null
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/AssignLoginPolicyRequest'
+      responses:
+        "204":
+          description: Assigned
+        "400":
+          description: No such policy in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such user in this company
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set a user's own login policy
+      tags:
+      - owner
+  /api/owner/products:
+    get:
+      description: 'Every product App Central signs people in to, with its registration:
+        redirect URIs, initiate_login_uri, role catalogue, and whether a client secret
+        is set.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ProductRegistration'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List products
+      tags:
+      - owner
+    post:
+      consumes:
+      - application/json
+      description: 'The key is permanent: every token for the product carries the
+        audience `product:<key>`. Then set its redirect URIs and roles, and issue
+        its client secret.'
+      parameters:
+      - description: The product
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/CreateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/ProductRegistration'
+        "400":
+          description: Malformed body, a bad key or URL
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: The key is taken
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Register a product
+      tags:
+      - owner
+  /api/owner/products/{pid}:
+    get:
+      parameters:
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ProductRegistration'
+        "404":
+          description: No such product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a product
+      tags:
+      - owner
+    patch:
+      consumes:
+      - application/json
+      description: The complete settable state, the key excepted. An inactive product
+        signs nobody in and renews no login. `accepts_api_clients` lets companies'
+        API clients get tokens for the product (off until switched on); leave it out
+        to keep it as it is.
+      parameters:
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: The product
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ProductRegistration'
+        "404":
+          description: No such product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a product
+      tags:
+      - owner
+  /api/owner/products/{pid}/client-secret:
+    post:
+      description: A new secret, shown in this response only and stored as a hash.
+        The previous one stops working at once, so deploy this one to the product's
+        backend straight away.
+      parameters:
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ProductSecret'
+        "404":
+          description: No such product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Issue a product's client secret
+      tags:
+      - owner
+  /api/owner/products/{pid}/redirect-uris:
+    put:
+      consumes:
+      - application/json
+      description: The COMPLETE list. An authorization code is delivered only to one
+        of these, matched byte for byte — no prefixes, no wildcards.
+      parameters:
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: The redirect URIs
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ProductRedirectURIsRequest'
+      responses:
+        "204":
+          description: Set
+        "400":
+          description: A URI that is not absolute https, or carries a fragment
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set a product's redirect URIs
+      tags:
+      - owner
+  /api/owner/products/{pid}/roles:
+    put:
+      consumes:
+      - application/json
+      description: The COMPLETE catalogue. Grants may name only these roles, and a
+        role still granted cannot be removed.
+      parameters:
+      - description: Product id
+        in: path
+        name: pid
+        required: true
+        type: string
+      - description: The roles
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ProductRolesRequest'
+      responses:
+        "204":
+          description: Set
+        "400":
+          description: A malformed role name
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: No such product
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: A role being removed is still granted
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set a product's role catalogue
+      tags:
+      - owner
+  /auth/accept-invitation:
+    post:
+      consumes:
+      - application/json
+      description: Creates the account, adds it to the invitation's groups and consumes
+        the invitation. Refused when the invitee's login policy does not allow passwords.
+        Answers 204 with no body; sign in afterwards at App Central.
+      parameters:
+      - description: Invitation token and the password to set
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/AcceptInvitationRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Account created
+        "400":
+          description: Invitation not found, expired or used, passwords not allowed,
+            or the password fails policy
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limited
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Accept an invitation with a password
+      tags:
+      - invitations
+  /auth/accept-invitation/federated:
+    post:
+      consumes:
+      - application/json
+      description: Creates an account with no password, for an invitee who will sign
+        in with Google or their company's SSO, adds it to the invitation's groups
+        and consumes the invitation. The external identity is linked at the first
+        sign-in. Refused when the invitee's login policy allows neither.
+      parameters:
+      - description: Invitation token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/AcceptInvitationFederatedRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Account created; sign in with Google or SSO
+        "400":
+          description: Invitation not found, expired or used, or neither Google nor
+            SSO allowed
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: An account with this address already exists
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limited
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Accept an invitation without a password
+      tags:
+      - invitations
+  /auth/accept-invitation/lookup:
+    get:
+      description: 'The invite landing page for a visitor holding the raw token: the
+        address, the company, the groups it joins, and how the invitee will sign in
+        (per the login policy they will have). Unauthenticated. Unknown, expired and
+        already-used tokens all return the same 400; limited to 20 attempts per 15
+        minutes.'
+      parameters:
+      - description: Raw invitation token from the invite link
+        in: query
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/InvitationPreview'
+        "400":
+          description: Invitation not found, expired, or already used
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limited
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Preview an invitation
+      tags:
+      - invitations
+  /auth/central/logout:
+    post:
+      description: 'Ends the App Central session and every product login opened under
+        it: no product can renew its tokens afterwards. A product access token already
+        issued stays valid until it expires, unless the product introspects it. Always
+        204.'
+      responses:
+        "204":
+          description: Signed out, or there was nothing to end
+        "403":
+          description: Cross-site request refused
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Sign out of App Central
+      tags:
+      - sign-in
+  /auth/central/refresh:
+    post:
+      description: |-
+        Rotates the refresh token in the session cookie and returns a new App Central access token. Takes no body. The session's rules are checked again first: the user and company active, the login policy still allowing how the user signed in (a session that no longer qualifies is ended), and the absolute fourteen-day cap.
+
+        Presenting a token that was already rotated away means two parties hold the chain, so the session and every product login under it are revoked. The one exception is a benign concurrent rotation, answered 409 with the cookie left intact.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/CentralTokenResponse'
+        "401":
+          description: Session invalid or expired; cookie cleared
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Cross-site request refused
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: Concurrent rotation — retry
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Refresh the App Central session
+      tags:
+      - sign-in
+  /auth/google/callback:
+    get:
+      description: |-
+        The return leg from Google. Always answers 302: to the return path on success, to /login for a choice between companies, or to /login?google_error=<code> on failure.
+
+        The state must match the browser's cookie and still be pending (single use, ten minutes). Google's ID token must verify — RS256 against Google's keys, issuer, audience, expiry and nonce. A linked Google identity signs in its accounts; otherwise a verified address signs in, and links, each live account that holds it. Google never creates an account, and each account's policy must allow Google.
+      parameters:
+      - description: Must match the browser's pending sign-in
+        in: query
+        name: state
+        required: true
+        type: string
+      - description: Google's authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect to /login?google_error=invalid_request, state_mismatch,
+            state_expired, exchange_failed, email_unverified, account_unavailable
+            or server_error
+      summary: Google sign-in callback
+      tags:
+      - sign-in
+  /auth/google/start:
+    get:
+      description: 'A browser navigation: answers 302 to Google''s consent screen,
+        with PKCE, a state bound to this browser by an HttpOnly cookie, and a nonce
+        bound to the ID token. `return_to` must be a path on App Central; anything
+        else is dropped.'
+      parameters:
+      - description: Where to go after signing in
+        in: query
+        name: return_to
+        type: string
+      responses:
+        "302":
+          description: Redirect to /login?google_error=google_disabled when Google
+            sign-in is not configured
+      summary: Begin Google sign-in
+      tags:
+      - sign-in
+  /auth/login/choices:
+    get:
+      description: For the page shown after Google proved accounts in several companies.
+        The choice is bound to this browser by an HttpOnly cookie and lasts five minutes.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/CompanyChoices'
+        "401":
+          description: No pending choice
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: List the companies of a pending account choice
+      tags:
+      - sign-in
+  /auth/login/choose:
+    post:
+      consumes:
+      - application/json
+      description: Starts the App Central session in the chosen company. The choice
+        is single-use, and the chosen account's login policy is applied again.
+      parameters:
+      - description: The company
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ChooseCompanyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LoginResponse'
+        "401":
+          description: No pending choice, or the company is not on offer
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Cross-site request refused
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Complete an account choice
+      tags:
+      - sign-in
+  /auth/login/discover:
+    post:
+      consumes:
+      - application/json
+      description: 'Answers from the address''s DOMAIN alone: a company that registered
+        the domain on an SSO connection gets that connection; a company with that
+        verified domain gets what its default policy allows; any other domain gets
+        the defaults. Every address at a domain gets the same answer, so it reveals
+        nothing about any account — and every sign-in path enforces the user''s own
+        policy regardless.'
+      parameters:
+      - description: The address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/LoginDiscoverRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LoginDiscoverResponse'
+      summary: Which sign-in methods to offer
+      tags:
+      - sign-in
+  /auth/login/password:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Checks the password against every live account that holds the address. When exactly one opens and its company's login policy allows passwords, the App Central session starts: its refresh token is set as the HttpOnly session cookie and an App Central access token is returned. When the password opens accounts in several companies, the answer is `choose_company` with the list — shown only after the password was right — and POST /auth/login/choose completes it.
+
+        No account, a wrong password, and a right password on an account whose policy does not allow passwords all get the same 401, in the same time. Rate limited per minute by ip|email together.
+      parameters:
+      - description: Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/PasswordLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LoginResponse'
+        "400":
+          description: Malformed body or unknown field
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Invalid email or password
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Cross-site request refused
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Body is not application/json
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limited
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Sign in with a password
+      tags:
+      - sign-in
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Sets a new password and consumes the reset token. Unauthenticated.
+
+        The field is `new_password`, not `password` — the invite-accept body uses that one, and unknown fields are rejected. Validation failures and unknown tokens collapse to the same 400 message, so a malformed body cannot be distinguished from a token that does not exist.
+
+        Every session of that user ends on success — at App Central and in every product: a reset performed because of a suspected compromise must not leave the attacker's sessions alive.
+      parameters:
+      - description: Reset token and the new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Password changed; all sessions revoked
+        "400":
+          description: Invalid or expired reset token
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limited
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Reset a password with a token
+      tags:
+      - passwords
+  /auth/sso/callback:
+    get:
+      description: The return leg from the identity provider. Always answers 302.
+        The ID token must verify against the provider's own keys (RS256), with its
+        issuer, audience, authorized party, expiry and nonce. A linked subject signs
+        in its account. Otherwise the first sign-in links by address — only at a domain
+        registered on the connection, with a verified address (unless the Owner trusts
+        the connection's addresses), to an account that already exists. SSO never
+        creates an account.
+      parameters:
+      - description: Must match the browser's pending sign-in
+        in: query
+        name: state
+        required: true
+        type: string
+      - description: The provider's authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect to /login?sso_error=<code>
+      summary: Company SSO sign-in callback
+      tags:
+      - sign-in
+  /auth/sso/start:
+    get:
+      description: 'A browser navigation: answers 302 to the company''s identity provider,
+        with PKCE, state and nonce. The connection is named by `connection_id`, or
+        found from the domain of `email`.'
+      parameters:
+      - description: The SSO connection
+        in: query
+        name: connection_id
+        type: string
+      - description: An address at a domain registered on a connection
+        in: query
+        name: email
+        type: string
+      - description: Where to go after signing in
+        in: query
+        name: return_to
+        type: string
+      responses:
+        "302":
+          description: Redirect to /login?sso_error=sso_unavailable
+      summary: Begin company SSO sign-in
+      tags:
+      - sign-in
+  /health:
+    get:
+      description: 'Reports that the process is running. Deliberately does not touch
+        the database: a transient DB fault must not make an orchestrator kill an otherwise
+        healthy process. Use /health/ready to decide whether to send traffic.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/HealthResponse'
+      summary: Liveness probe
+      tags:
+      - health
+  /health/pressure:
+    get:
+      description: Returns 503 once heap or RSS crosses the ceiling, so a loaded process
+        degrades by shedding traffic instead of being OOM-killed mid-request. Both
+        counters are reported either way.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/PressureResponse'
+        "503":
+          description: Over the heap or RSS ceiling
+          schema:
+            $ref: '#/definitions/PressureResponse'
+      summary: Memory-pressure probe
+      tags:
+      - health
+  /health/ready:
+    get:
+      description: Reports whether this instance can serve traffic, which requires
+        a reachable database. The check is bounded at two seconds so a hung connection
+        fails the probe instead of hanging it.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/HealthResponse'
+        "503":
+          description: Database unreachable
+          schema:
+            $ref: '#/definitions/HealthResponse'
+      summary: Readiness probe
+      tags:
+      - health
+  /oauth/authorize:
+    get:
+      description: |-
+        A browser navigation, started by a product's backend (usually from its `initiate_login_uri` when App Central launches it). With a usable App Central session, and access to the product, it answers 302 straight back to `redirect_uri` with `code`, `state` and `iss` — no page is shown. Without a session it sends the browser to App Central's login page and resumes here afterwards; with `prompt=none` it answers `error=login_required` instead.
+
+        An unknown `client_id` or a `redirect_uri` that is not registered byte for byte is shown as an error here and never redirected. Every later failure redirects to `redirect_uri` with an OAuth error: `unsupported_response_type`, `invalid_request` (PKCE with S256 is required), `invalid_scope`, `login_required` or `access_denied` (no role in the product, no live subscription, or an inactive product). A parameter given twice is refused — `client_id` or `redirect_uri` here, any other with `invalid_request`.
+      parameters:
+      - description: Must be code
+        enum:
+        - code
+        in: query
+        name: response_type
+        required: true
+        type: string
+      - description: The product's id
+        in: query
+        name: client_id
+        required: true
+        type: string
+      - description: One of the product's registered redirect URIs, exactly
+        in: query
+        name: redirect_uri
+        required: true
+        type: string
+      - description: openid email profile; openid adds an ID token
+        in: query
+        name: scope
+        type: string
+      - description: Echoed back on the redirect
+        in: query
+        name: state
+        type: string
+      - description: Echoed in the ID token
+        in: query
+        name: nonce
+        type: string
+      - description: base64url(sha256(code_verifier))
+        in: query
+        name: code_challenge
+        required: true
+        type: string
+      - description: Must be S256
+        enum:
+        - S256
+        in: query
+        name: code_challenge_method
+        required: true
+        type: string
+      - description: 'none: never show a page; login: always sign in again'
+        in: query
+        name: prompt
+        type: string
+      responses:
+        "302":
+          description: To redirect_uri with a code, or to the login page
+        "400":
+          description: Unknown application or unregistered redirect URI
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Authorization endpoint
+      tags:
+      - provider
+  /oauth/introspect:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: 'Whether a token is usable RIGHT NOW — for a product that must
+        honour sign-out and role changes within seconds rather than when its fifteen-minute
+        token expires. A person''s access token (`principal` "user") is active only
+        while its product login, the App Central session above it, the user and the
+        company are live, the user still has access, and its roles are still current.
+        An application''s (`principal` "client") is active only while its API client
+        and company are on, the secret it was issued under is live, the product is
+        still on the client''s list and usable, and the client still holds every scope
+        in it. A product may introspect only tokens for itself; anything else is `{"active":
+        false}`. Products only: an API client is `unauthorized_client`.'
+      parameters:
+      - description: Basic base64(client_id:client_secret)
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: An access or refresh token
+        in: formData
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/IntrospectionResponse'
+        "400":
+          description: 'unauthorized_client: an API client'
+          schema:
+            $ref: '#/definitions/OAuthError'
+        "401":
+          description: invalid_client
+          schema:
+            $ref: '#/definitions/OAuthError'
+      summary: Introspection endpoint (RFC 7662)
+      tags:
+      - provider
+  /oauth/revoke:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: 'Ends the product login a refresh token or access token belongs
+        to — for signing a user out of one product. Authenticated like the token endpoint,
+        by products only: an API client is `unauthorized_client`. Always 200, whatever
+        the token: an unknown token, an expired one or another product''s is simply
+        not acted on.'
+      parameters:
+      - description: Basic base64(client_id:client_secret)
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: A refresh or access token
+        in: formData
+        name: token
+        required: true
+        type: string
+      responses:
+        "200":
+          description: Done, or nothing to do
+        "400":
+          description: 'unauthorized_client: an API client'
+          schema:
+            $ref: '#/definitions/OAuthError'
+        "401":
+          description: invalid_client
+          schema:
+            $ref: '#/definitions/OAuthError'
+      summary: Revocation endpoint (RFC 7009)
+      tags:
+      - provider
+  /oauth/token:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: |-
+        Called by a product's backend or an application, never a browser: form-encoded (application/x-www-form-urlencoded), authenticated with HTTP Basic (client_secret_basic, the client id and secret each form-encoded). Every response is `Cache-Control: no-store`.
+
+        `grant_type=authorization_code` redeems a code with `code`, `redirect_uri` (exactly as sent to /oauth/authorize) and the PKCE `code_verifier`. A code works once; presenting it again revokes the login it opened. The result is an access token for this product alone (audience `product:<key>`, this product's roles only, fifteen minutes), a refresh token, and — when the scope included openid — an ID token.
+
+        `grant_type=refresh_token` rotates the refresh token: the old one stops working, and replaying it revokes this product's login. Each refresh checks everything again — the App Central session above it, the user, the company, the login policy and the user's access to the product — and a login that no longer qualifies is ended.
+
+        `grant_type=client_credentials` is for API clients only (products use the two grants above): `resource=product:<key>` (RFC 8707) names one product on the client's list, and the optional `scope` asks for some of the scopes it holds (all of them without it). The result is an access token for that product (audience `product:<key>`, `principal` "client", its `scope`, no roles, fifteen minutes) with no refresh token and no ID token. A product unknown, not on the list or not usable is `invalid_target`; a scope the client lacks is `invalid_scope`; a grant the client may not use is `unauthorized_client`.
+      parameters:
+      - description: Basic base64(client_id:client_secret)
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: authorization_code, refresh_token or client_credentials
+        in: formData
+        name: grant_type
+        required: true
+        type: string
+      - description: 'authorization_code: the code'
+        in: formData
+        name: code
+        type: string
+      - description: 'authorization_code: the redirect URI'
+        in: formData
+        name: redirect_uri
+        type: string
+      - description: 'authorization_code: the PKCE verifier'
+        in: formData
+        name: code_verifier
+        type: string
+      - description: 'refresh_token: the refresh token'
+        in: formData
+        name: refresh_token
+        type: string
+      - description: 'client_credentials: product:<key>'
+        in: formData
+        name: resource
+        type: string
+      - description: 'client_credentials: the scopes wanted, space-separated'
+        in: formData
+        name: scope
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/OAuthTokenResponse'
+        "400":
+          description: invalid_request, invalid_grant, invalid_target, invalid_scope,
+            unauthorized_client or unsupported_grant_type
+          schema:
+            $ref: '#/definitions/OAuthError'
+        "401":
+          description: invalid_client
+          schema:
+            $ref: '#/definitions/OAuthError'
+        "409":
+          description: A concurrent refresh of the same token
+          schema:
+            $ref: '#/definitions/OAuthError'
+      summary: Token endpoint
+      tags:
+      - provider
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 'An App Central access token from /auth/login/password or /auth/central/refresh.
+      Enter it as: Bearer &lt;token&gt;'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
+tags:
+- description: Liveness, readiness and load-shedding probes. Unauthenticated.
+  name: health
+- description: The OpenID Provider metadata and signing keys. Public, and readable
+    from any origin.
+  name: standards
+- description: The OpenID Provider endpoints products integrate with.
+  name: provider
+- description: 'App Central sign-in: password, the company chooser, Google, company
+    SSO, and the session.'
+  name: sign-in
+- description: The signed-in person's own account and apps.
+  name: me
+- description: Issuing invitations, and redeeming them without a session.
+  name: invitations
+- description: Administrator-issued resets and redeeming them.
+  name: passwords
+- description: A company's users, for its Admins and delegates.
+  name: users
+- description: A company's groups and their members.
+  name: groups
+- description: A company's live sign-ins.
+  name: sessions
+- description: 'A company''s API clients: applications'' identities — a client ID
+    and secret, the products each may get a token for, and where that token may be
+    used (REST, gRPC, MCP).'
+  name: api-clients
+- description: A company's own record and its product subscriptions.
+  name: tenant
+- description: 'The Owner console: every company, product registration, groups, login
+    policies and SSO. The company-scoped user, invitation, group-membership and password-reset
+    operations documented under /api/admin are also served for ANY company at the
+    same path under /api/owner/companies/{cid} — /users (with /scopes and /password-reset),
+    /invitations, /groups (with /scopes, /members and /managers) and /api-clients
+    (with /scopes, /products and /secrets) — with the same bodies and the X-Alora-Target-Company
+    echo on writes.'
+  name: owner

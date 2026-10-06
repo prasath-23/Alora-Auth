@@ -2,37 +2,47 @@ package main
 
 // Integration tests exercise the REAL router, middleware chain and database, so
 // they cannot drift from production the way a hand-rolled test harness would.
-// Skipped unless ALORA_TEST_DB points at a migrated Postgres, keeping
+// Skipped unless ALORA_TEST_DB points at a built database, keeping
 // `go test ./...` green on a machine without Docker:
 //
-//	ALORA_TEST_DB=postgres://postgres:test@127.0.0.1:55533/alora_test go test ./cmd/api -v
+//	bash scripts/integration-test.sh
+//
+// The router connects as ALORA_TEST_DB, which the script points at the
+// least-privilege alora_app role, exactly as production does. Fixtures are
+// seeded through ALORA_TEST_OWNER_DB, the schema owner: they write rows the
+// application role deliberately cannot, such as an Owner.
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
-	"time"
 
-	"github.com/alora/auth/internal/admin"
-	"github.com/alora/auth/internal/auth"
 	"github.com/alora/auth/internal/config"
-	"github.com/alora/auth/internal/crypto/jwtkeys"
-	"github.com/alora/auth/internal/invitation"
-	"github.com/alora/auth/internal/mailer"
-	"github.com/alora/auth/internal/oauth"
-	"github.com/alora/auth/internal/platform/audit"
-	"github.com/alora/auth/internal/platform/database"
-	"github.com/alora/auth/internal/platform/database/sqlc"
-	"github.com/alora/auth/internal/platform/httpx"
-	"github.com/alora/auth/internal/platform/logger"
-	"github.com/alora/auth/internal/reset"
-	"github.com/alora/auth/internal/session"
+	"github.com/alora/auth/internal/core/shared"
+	"github.com/alora/auth/internal/database/contexts"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const (
+	testIssuer   = "https://auth.alora.test"
+	testFrontend = "https://central.alora.test"
+	testPassword = "correct horse battery staple"
+)
+
+// testSSOKey is the 32-byte key SSO secrets are sealed with in tests.
+var testSSOKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 
 func testEnv(t *testing.T) {
 	t.Helper()
@@ -44,223 +54,280 @@ func testEnv(t *testing.T) {
 	if priv == "" || pub == "" {
 		t.Skip("ALORA_TEST_PRIV/PUB not set; skipping integration tests")
 	}
-	t.Setenv("NODE_ENV", "test")
-	t.Setenv("DATABASE_URL", dsn)
-	t.Setenv("JWT_PRIVATE_KEY", priv)
-	t.Setenv("JWT_PUBLIC_KEY", pub)
-	t.Setenv("JWT_KEY_ID", "test-kid")
-	t.Setenv("JWT_ISSUER", "https://auth.alora.test")
-	t.Setenv("COOKIE_SECRET", "0123456789012345678901234567890123456789")
-	t.Setenv("GOOGLE_CLIENT_ID", "gid")
-	t.Setenv("GOOGLE_CLIENT_SECRET", "gsecret")
-	t.Setenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:3099/auth/google/callback")
+	for k, v := range map[string]string{
+		"NODE_ENV":             "test",
+		"DATABASE_URL":         dsn,
+		"JWT_PRIVATE_KEY":      priv,
+		"JWT_PUBLIC_KEY":       pub,
+		"JWT_KEY_ID":           "test-kid",
+		"JWT_ISSUER":           testIssuer,
+		"JWT_VERIFY_KEYS":      "",
+		"FRONTEND_URL":         testFrontend,
+		"COOKIE_SECRET":        "0123456789012345678901234567890123456789",
+		"GOOGLE_CLIENT_ID":     "gid",
+		"GOOGLE_CLIENT_SECRET": "gsecret",
+		"GOOGLE_REDIRECT_URI":  testFrontend + "/auth/google/callback",
+		"SSO_SECRET_KEY":       testSSOKey,
+		"SSO_SECRET_KEY_ID":    "test-k1",
+		"MAIL_HOST":            "",
+		"COOKIE_DOMAIN":        "",
+		"TRUSTED_PROXIES":      "",
+	} {
+		t.Setenv(k, v)
+	}
 }
 
-func newTestRouter(t *testing.T) *gin.Engine {
+// ownerDSN is the connection tests seed and inspect through.
+func ownerDSN() string {
+	if dsn := os.Getenv("ALORA_TEST_OWNER_DB"); dsn != "" {
+		return dsn
+	}
+	return os.Getenv("ALORA_TEST_DB")
+}
+
+// app is one router over the real wiring, plus the owner's connection for
+// seeding and assertions.
+type app struct {
+	t     *testing.T
+	cfg   *config.Config
+	m     *modules
+	r     *gin.Engine
+	db    *contexts.DbContext // the router's own (alora_app)
+	owner *contexts.DbContext // the schema owner's
+	pool  *pgxpool.Pool       // owner.Pool(), for plain SQL
+}
+
+func newApp(t *testing.T) *app { return newAppWith(t, nil, nil) }
+
+// newAppWith lets a test adjust the environment before configuration loads and
+// the wiring before the router is built.
+func newAppWith(t *testing.T, env map[string]string, adjust func(*modules)) *app {
 	t.Helper()
 	testEnv(t)
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
 	gin.SetMode(gin.TestMode)
 
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	if err := jwtkeys.Init(cfg.JWT.PrivateKeyPEM, cfg.JWT.PublicKeyPEM, cfg.JWT.KeyID, cfg.JWT.Issuer); err != nil {
+	if err := initKeys(cfg); err != nil {
 		t.Fatalf("jwtkeys: %v", err)
 	}
-	pool, err := database.New(context.Background(), cfg.DatabaseURL, database.Options{})
+	ctx := context.Background()
+	db, err := contexts.Connect(ctx, cfg.DatabaseURL, contexts.Options{})
 	if err != nil {
 		t.Fatalf("database: %v", err)
 	}
-	t.Cleanup(pool.Close)
+	t.Cleanup(db.Close)
+	owner, err := contexts.Connect(ctx, ownerDSN(), contexts.Options{})
+	if err != nil {
+		t.Fatalf("owner database: %v", err)
+	}
+	t.Cleanup(owner.Close)
 
-	q := sqlc.New(pool)
-	authRepo := auth.NewRepo(q)
-	authSvc := auth.NewService(authRepo, cfg.JWT.AccessTTL, cfg.JWT.APIAudience)
-	jar := httpx.NewCookieJar(cfg.Cookie.Domain, cfg.IsProd, cfg.Cookie.Secret)
-	sessSvc := session.NewService(pool, q, cfg.JWT.RefreshTTL)
-	oauthH := oauth.NewHandler(oauth.NewService(q), authSvc, sessSvc, jar)
-	mail := mailer.New(cfg.Mail)
-	auditLog := audit.New(audit.NewRepo(q), logger.New(false))
-	inviteH := invitation.NewHandler(invitation.NewService(pool, q, cfg.FrontendURL), mail, auditLog, q)
-	resetH := reset.NewHandler(reset.NewService(pool, q, cfg.FrontendURL), mail, auditLog)
-	adminH := admin.New(pool, q, auditLog)
-	googleH := oauth.NewGoogleHandler(oauth.NewService(q), oauth.GoogleConfig{
-		ClientID: cfg.Google.ClientID, ClientSecret: cfg.Google.ClientSecret,
-		RedirectURI: cfg.Google.RedirectURI, FrontendURL: cfg.FrontendURL,
-	}, jar)
-	r, err := newRouter(cfg, logger.New(false), q, authRepo, oauthH, inviteH, resetH, adminH, googleH)
+	log := testLogger()
+	m, err := newModules(cfg, log, db)
+	if err != nil {
+		t.Fatalf("modules: %v", err)
+	}
+	if adjust != nil {
+		adjust(m)
+	}
+	r, err := newRouter(cfg, log, m)
 	if err != nil {
 		t.Fatalf("router: %v", err)
 	}
-	return r
+	return &app{t: t, cfg: cfg, m: m, r: r, db: db, owner: owner, pool: owner.Pool()}
 }
 
-func do(r *gin.Engine, method, path string, headers map[string]string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, nil)
-	for k, v := range headers {
-		req.Header.Set(k, v)
+// testLogger is quiet unless ALORA_TEST_VERBOSE is set: every refusal a test
+// provokes is otherwise a DEBUG line, and they bury the one failure that matters.
+func testLogger() *slog.Logger {
+	if os.Getenv("ALORA_TEST_VERBOSE") != "" {
+		return shared.NewLogger(false)
+	}
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// rebuild swaps in a router over adjusted wiring, keeping the connections.
+func (a *app) rebuild(adjust func(*modules)) {
+	a.t.Helper()
+	log := testLogger()
+	m, err := newModules(a.cfg, log, a.db)
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	adjust(m)
+	r, err := newRouter(a.cfg, log, m)
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	a.m, a.r = m, r
+}
+
+// ---------- requests ----------
+
+type reqOpt func(*http.Request)
+
+func bearer(tok string) reqOpt {
+	return func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+tok) }
+}
+func withCookie(ck *http.Cookie) reqOpt {
+	return func(r *http.Request) {
+		if ck != nil {
+			r.AddCookie(ck)
+		}
+	}
+}
+func header(k, v string) reqOpt { return func(r *http.Request) { r.Header.Set(k, v) } }
+func basic(id, secret string) reqOpt {
+	return func(r *http.Request) { r.SetBasicAuth(url.QueryEscape(id), url.QueryEscape(secret)) }
+}
+
+// send issues a request to the router. A body that is url.Values is sent as a
+// form, a string as-is with no content type, anything else as JSON.
+func (a *app) send(method, path string, body any, opts ...reqOpt) *httptest.ResponseRecorder {
+	var rd io.Reader
+	ctype := ""
+	switch b := body.(type) {
+	case nil:
+	case url.Values:
+		rd, ctype = strings.NewReader(b.Encode()), "application/x-www-form-urlencoded"
+	case string:
+		rd = strings.NewReader(b)
+	default:
+		raw, _ := json.Marshal(b)
+		rd, ctype = strings.NewReader(string(raw)), "application/json"
+	}
+	req := httptest.NewRequest(method, path, rd)
+	if ctype != "" {
+		req.Header.Set("Content-Type", ctype)
+	}
+	for _, o := range opts {
+		o(req)
 	}
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	a.r.ServeHTTP(w, req)
 	return w
 }
 
-func TestHealthEndpoints(t *testing.T) {
-	r := newTestRouter(t)
-	for _, tc := range []struct{ path, wantStatus string }{
-		{"/health", "ok"}, {"/health/ready", "ready"}, {"/health/pressure", "ok"},
-	} {
-		w := do(r, http.MethodGet, tc.path, nil)
-		if w.Code != http.StatusOK {
-			t.Errorf("%s: status %d, want 200", tc.path, w.Code)
+func (a *app) get(path string, opts ...reqOpt) *httptest.ResponseRecorder {
+	return a.send(http.MethodGet, path, nil, opts...)
+}
+
+func (a *app) post(path string, body any, opts ...reqOpt) *httptest.ResponseRecorder {
+	return a.send(http.MethodPost, path, body, opts...)
+}
+
+func cookieNamed(w *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, ck := range w.Result().Cookies() {
+		if ck.Name == name {
+			return ck
 		}
-		var body map[string]any
-		_ = json.Unmarshal(w.Body.Bytes(), &body)
-		if body["status"] != tc.wantStatus {
-			t.Errorf("%s: status=%v, want %q", tc.path, body["status"], tc.wantStatus)
-		}
+	}
+	return nil
+}
+
+// decode reads a JSON response body into a map.
+func decode(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+		t.Fatalf("response is not a JSON object (%d): %s", w.Code, w.Body.String())
+	}
+	return m
+}
+
+func decodeInto(t *testing.T, w *httptest.ResponseRecorder, dst any) {
+	t.Helper()
+	if err := json.Unmarshal(w.Body.Bytes(), dst); err != nil {
+		t.Fatalf("decode %d %s: %v", w.Code, w.Body.String(), err)
 	}
 }
 
-func TestSecurityHeadersOnEveryResponse(t *testing.T) {
-	r := newTestRouter(t)
-	// Verified on an ERROR response too: headers must not be skipped when a
-	// request fails, which is exactly when a browser is most at risk.
-	for _, path := range []string{"/health", "/nope"} {
-		w := do(r, http.MethodGet, path, nil)
-		for h, want := range map[string]string{
-			"Content-Security-Policy":           "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-			"X-Content-Type-Options":            "nosniff",
-			"X-Frame-Options":                   "DENY",
-			"Referrer-Policy":                   "no-referrer",
-			"Cross-Origin-Opener-Policy":        "same-origin",
-			"X-Permitted-Cross-Domain-Policies": "none",
-		} {
-			if got := w.Header().Get(h); got != want {
-				t.Errorf("%s: header %s = %q, want %q", path, h, got, want)
-			}
-		}
-		if w.Header().Get("X-Request-Id") == "" {
-			t.Errorf("%s: missing X-Request-Id", path)
-		}
+func jsonField(w *httptest.ResponseRecorder, key string) string {
+	var m map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &m)
+	s, _ := m[key].(string)
+	return s
+}
+
+func expect(t *testing.T, w *httptest.ResponseRecorder, status int, what string) {
+	t.Helper()
+	if w.Code != status {
+		t.Fatalf("%s: status %d, want %d (%s)", what, w.Code, status, w.Body.String())
 	}
 }
 
-func TestHSTSOnlyInProd(t *testing.T) {
-	r := newTestRouter(t) // NODE_ENV=test
-	if h := do(r, http.MethodGet, "/health", nil).Header().Get("Strict-Transport-Security"); h != "" {
-		t.Errorf("HSTS must not be sent outside production, got %q", h)
+// randSuffix keeps seeded rows unique so repeated runs cannot collide on the
+// unique indexes.
+func randSuffix(t *testing.T) string {
+	t.Helper()
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprintf("%x", b)
+}
+
+// exec runs owner-side SQL for a fixture adjustment.
+func (a *app) exec(sql string, args ...any) {
+	a.t.Helper()
+	if _, err := a.pool.Exec(context.Background(), sql, args...); err != nil {
+		a.t.Fatalf("exec %q: %v", sql, err)
 	}
 }
 
-func TestNotFoundAndMethodNotAllowed(t *testing.T) {
-	r := newTestRouter(t)
-
-	w := do(r, http.MethodGet, "/definitely-not-a-route", nil)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("unknown route: %d, want 404", w.Code)
-	}
-	// The 404 envelope deliberately omits reqId (Fastify parity).
-	if strings.Contains(w.Body.String(), "reqId") {
-		t.Errorf("404 body must not contain reqId: %s", w.Body.String())
-	}
-
-	if w := do(r, http.MethodPost, "/health", nil); w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("wrong verb: %d, want 405", w.Code)
+func (a *app) scalar(dst any, sql string, args ...any) {
+	a.t.Helper()
+	if err := a.pool.QueryRow(context.Background(), sql, args...).Scan(dst); err != nil {
+		a.t.Fatalf("query %q: %v", sql, err)
 	}
 }
 
-func TestJWKSExposesOnlyPublicKeyMaterial(t *testing.T) {
-	r := newTestRouter(t)
-	w := do(r, http.MethodGet, "/auth/jwks", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status %d", w.Code)
-	}
-	if cc := w.Header().Get("Cache-Control"); cc != "public, max-age=300, must-revalidate" {
-		t.Errorf("Cache-Control = %q", cc)
-	}
-	body := w.Body.String()
-	// "d" is the RSA PRIVATE exponent; its presence would leak the signing key.
-	for _, leak := range []string{`"d":`, `"p":`, `"q":`, "PRIVATE"} {
-		if strings.Contains(body, leak) {
-			t.Fatalf("SECURITY: JWKS leaked private material %q: %s", leak, body)
-		}
-	}
-	for _, want := range []string{`"kty":"RSA"`, `"alg":"RS256"`, `"use":"sig"`, `"kid":`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("JWKS missing %s: %s", want, body)
-		}
-	}
+func (a *app) count(sql string, args ...any) int {
+	a.t.Helper()
+	var n int
+	a.scalar(&n, sql, args...)
+	return n
 }
 
-// Every one of these must be rejected with 401.
-func TestAdminRouteRejectsBadCredentials(t *testing.T) {
-	r := newTestRouter(t)
-	cases := []struct{ name, header string }{
-		{"no header", ""},
-		{"garbage token", "Bearer garbage"},
-		{"empty bearer", "Bearer "},
-		{"wrong scheme", "Basic YWJjOjEyMw=="},
-		{"bare token, no scheme", "eyJhbGciOiJSUzI1NiJ9.e30.x"},
-		// alg=none is THE classic JWT forgery; verification pins RS256.
-		{"alg=none forgery", "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhIiwiY2xpZW50X2lkIjoiYiIsImV4cCI6OTk5OTk5OTk5OX0."},
-		{"HS256 forgery", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhIiwiY2xpZW50X2lkIjoiYiIsImV4cCI6OTk5OTk5OTk5OX0.c2ln"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			h := map[string]string{}
-			if tc.header != "" {
-				h["Authorization"] = tc.header
-			}
-			w := do(r, http.MethodGet, "/admin/me/features", h)
-			if w.Code != http.StatusUnauthorized {
-				t.Errorf("status %d, want 401 (body: %s)", w.Code, w.Body.String())
-			}
-		})
-	}
-}
+var platformOnce sync.Mutex
 
-// A signed-but-unknown user must still fail: the token is cryptographically
-// valid, so only the DB freshness check can reject it.
-func TestValidSignatureUnknownUserIsRejected(t *testing.T) {
-	r := newTestRouter(t)
-	tok, err := jwtkeys.Sign("00000000-0000-0000-0000-000000000000",
-		map[string]any{"client_id": "no-such-tenant", "pv": 1, "roles": map[string]string{}},
-		15*time.Minute, []string{"alora-auth-api"})
+func decodeSegment(s string) ([]byte, error) { return base64.RawURLEncoding.DecodeString(s) }
+
+// claims reads a JWT's payload WITHOUT verifying it: for asserting what a token
+// that was already verified (or is about to be refused) carries.
+func claims(t *testing.T, tok string) map[string]any {
+	t.Helper()
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		t.Fatalf("not a JWT: %q", tok)
+	}
+	raw, err := decodeSegment(parts[1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := do(r, http.MethodGet, "/admin/me/features", map[string]string{"Authorization": "Bearer " + tok})
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("status %d, want 401 for unknown user", w.Code)
+	var c map[string]any
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.Fatal(err)
 	}
+	return c
 }
 
-func TestCORSFailsClosed(t *testing.T) {
-	r := newTestRouter(t)
-
-	w := do(r, http.MethodGet, "/health", map[string]string{"Origin": "https://evil.example"})
-	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
-		t.Errorf("SECURITY: untrusted origin allowed: %q", got)
+// jwtHeader reads a JWT's protected header.
+func jwtHeader(t *testing.T, tok string) map[string]any {
+	t.Helper()
+	raw, err := decodeSegment(strings.Split(tok, ".")[0])
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	w = do(r, http.MethodOptions, "/health", map[string]string{
-		"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
-	if w.Code != http.StatusForbidden {
-		t.Errorf("evil preflight: %d, want 403", w.Code)
+	var h map[string]any
+	if err := json.Unmarshal(raw, &h); err != nil {
+		t.Fatal(err)
 	}
-
-	// Dev origins are permitted only because NODE_ENV != production.
-	w = do(r, http.MethodGet, "/health", map[string]string{"Origin": "http://localhost:5173"})
-	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
-		t.Errorf("localhost origin = %q, want echoed", got)
-	}
-	if !strings.Contains(w.Header().Get("Vary"), "Origin") {
-		t.Error("Vary: Origin missing — a shared cache could cross tenants")
-	}
-	// Credentials + wildcard together would be a catastrophic misconfiguration.
-	if w.Header().Get("Access-Control-Allow-Origin") == "*" {
-		t.Error("SECURITY: wildcard ACAO with credentials")
-	}
+	return h
 }
