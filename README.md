@@ -525,6 +525,7 @@ blip allows the request rather than refusing every caller.
 | [`alora-auth-db/Migrations/README.md`](alora-auth-db/Migrations/README.md) | The v3 baseline, and when a change needs a migration |
 | [`alora-auth-go/README.md`](alora-auth-go/README.md) | The Go helper: tokens for applications, token checks for products, the gRPC demo |
 | [`alora-auth-ui/e2e/README.md`](alora-auth-ui/e2e/README.md) | The browser suite: what runs where, and what each spec covers |
+| [`alora-auth-ui/UI-DESIGN-BRIEF.md`](alora-auth-ui/UI-DESIGN-BRIEF.md) | A brief for redesigning the UI on the same API: every page, its features and states, the shared patterns, and what is fixed |
 | [`alora-auth-api/JUSTIFICATION.md`](alora-auth-api/JUSTIFICATION.md) | A construct-level audit of the foundations (predates App Central) |
 | [`AGENTS.md`](AGENTS.md) | For AI coding agents: the rules the build enforces, the commands, what "done" means (`CLAUDE.md` imports it) |
 | [`docs/agents/`](docs/agents/index.md) | Agent knowledge (Open Knowledge Format): an architecture map, change playbooks, gotchas |
